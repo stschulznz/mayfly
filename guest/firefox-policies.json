@@ -1,0 +1,114 @@
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DontCheckDefaultBrowser": true,
+    "ExtensionUpdate": false,
+    "DisableSystemAddonUpdate": true,
+
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisableFirefoxAccounts": true,
+    "DisableProfileImport": true,
+    "DisableFeedbackCommands": true,
+    "DisableDeveloperTools": true,
+
+    "DNSOverHTTPS": { "Enabled": false, "Locked": true },
+    "CaptivePortal": false,
+    "NetworkPrediction": false,
+
+    "HttpsOnlyMode": "enabled",
+    "EnableTrackingProtection": { "Value": true, "Locked": true, "Category": "strict" },
+    "DisableSecurityBypass": { "InvalidCertificate": true, "SafeBrowsing": true },
+
+    "Permissions": {
+      "Camera": { "BlockNewRequests": true, "Locked": true },
+      "Microphone": { "BlockNewRequests": true, "Locked": true },
+      "Location": { "BlockNewRequests": true, "Locked": true },
+      "Notifications": { "BlockNewRequests": true, "Locked": true },
+      "Autoplay": { "Default": "block-audio", "Locked": true }
+    },
+
+    "PasswordManagerEnabled": false,
+    "OfferToSaveLogins": false,
+    "DisableFormHistory": true,
+    "AutofillAddressEnabled": false,
+    "AutofillCreditCardEnabled": false,
+
+    "FirefoxHome": {
+      "Search": true,
+      "TopSites": false,
+      "SponsoredTopSites": false,
+      "Highlights": false,
+      "Pocket": false,
+      "SponsoredPocket": false,
+      "Stories": false,
+      "SponsoredStories": false,
+      "Snippets": false,
+      "Locked": true
+    },
+    "UserMessaging": {
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "SkipOnboarding": true,
+      "MoreFromMozilla": false,
+      "FirefoxLabs": false,
+      "Locked": true
+    },
+    "SkipTermsOfUse": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "SearchSuggestEnabled": false,
+    "FirefoxSuggest": {
+      "WebSuggestions": false,
+      "SponsoredSuggestions": false,
+      "ImproveSuggest": false,
+      "Locked": true
+    },
+
+    "GenerativeAI": { "Enabled": false, "Locked": true },
+    "TranslateEnabled": false,
+    "EncryptedMediaExtensions": { "Enabled": false, "Locked": true },
+
+    "ExtensionSettings": {
+      "*": {
+        "installation_mode": "blocked",
+        "blocked_install_message": "Extensions are disabled in this disposable session."
+      }
+    },
+    "InstallAddonsPermission": { "Default": false },
+    "BlockAboutAddons": true,
+
+    "PDFjs": { "Enabled": true, "EnablePermissions": true },
+
+    "Preferences": {
+      "network.trr.mode": { "Value": 5, "Status": "locked" },
+      "network.connectivity-service.enabled": { "Value": false, "Status": "locked" },
+      "network.http.speculative-parallel-limit": { "Value": 0, "Status": "locked" },
+      "network.prefetch-next": { "Value": false, "Status": "locked" },
+      "network.predictor.enabled": { "Value": false, "Status": "locked" },
+      "network.dns.disableIPv6": { "Value": true, "Status": "locked" },
+      "network.http.referer.XOriginTrimmingPolicy": { "Value": 2, "Status": "locked" },
+      "browser.urlbar.speculativeConnect.enabled": { "Value": false, "Status": "locked" },
+      "browser.region.update.enabled": { "Value": false, "Status": "locked" },
+      "browser.search.update": { "Value": false, "Status": "locked" },
+      "browser.discovery.enabled": { "Value": false, "Status": "locked" },
+      "browser.uitour.enabled": { "Value": false, "Status": "locked" },
+      "browser.cache.disk.enable": { "Value": false, "Status": "locked" },
+      "browser.sessionstore.privacy_level": { "Value": 2, "Status": "locked" },
+      "browser.sessionstore.resume_from_crash": { "Value": false, "Status": "locked" },
+      "browser.tabs.crashReporting.sendReport": { "Value": false, "Status": "locked" },
+      "browser.crashReports.unsubmittedCheck.autoSubmit2": { "Value": false, "Status": "locked" },
+      "extensions.getAddons.showPane": { "Value": false, "Status": "locked" },
+      "extensions.htmlaboutaddons.recommendations.enabled": { "Value": false, "Status": "locked" },
+      "xpinstall.enabled": { "Value": false, "Status": "locked" },
+      "dom.private-attribution.submission.enabled": { "Value": false, "Status": "locked" },
+      "geo.enabled": { "Value": false, "Status": "locked" },
+      "pdfjs.enableScripting": { "Value": false, "Status": "locked" },
+      "media.peerconnection.ice.default_address_only": { "Value": true, "Status": "locked" },
+      "media.peerconnection.ice.no_host": { "Value": true, "Status": "locked" },
+      "media.gmp-manager.updateEnabled": { "Value": false, "Status": "locked" },
+      "media.gmp-provider.enabled": { "Value": false, "Status": "locked" }
+    }
+  }
+}

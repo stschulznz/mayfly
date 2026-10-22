@@ -1,0 +1,53 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-suite:
+    name: offline suite (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:13
+            install: apt-get update && apt-get install -y --no-install-recommends git jq python3 acl gawk util-linux xorriso ca-certificates
+          - image: ubuntu:24.04
+            install: apt-get update && apt-get install -y --no-install-recommends git jq python3 acl gawk util-linux xorriso ca-certificates
+          - image: fedora:latest
+            install: dnf install -y git jq python3 acl gawk util-linux xorriso
+          - image: archlinux:latest
+            install: pacman -Syu --noconfirm --needed git jq python acl gawk util-linux libisoburn
+          - image: opensuse/tumbleweed:latest
+            install: zypper --non-interactive install git-core jq python3 acl gawk util-linux xorriso tar gzip findutils
+    steps:
+      - name: Install test dependencies
+        run: ${{ matrix.install }}
+      - uses: actions/checkout@v4
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Create an unprivileged test user
+        run: |
+          useradd --create-home tester
+          chown -R tester "$GITHUB_WORKSPACE"
+      - name: Syntax check
+        run: |
+          for f in $(git ls-files '*.sh'); do bash -n "$f"; done
+      - name: Offline regression suite (as an ordinary user)
+        run: runuser -u tester -- env HOME=/home/tester bash tests/run.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck (errors only)
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck --severity=error --exclude=SC2148 $(git ls-files '*.sh')

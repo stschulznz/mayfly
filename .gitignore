@@ -1,0 +1,14 @@
+# Local credentials, images and state never belong in source control.
+/local/
+/state/
+*.key
+*.qcow2
+*.raw
+*.img
+*.iso
+*.log
+*.conf
+!tests/fixtures/synthetic.conf
+# Guest router configuration (no credentials); the pattern above still blocks profiles.
+!guest/i2pd.conf
+!guest/i2p-tunnels.conf

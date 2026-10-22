@@ -1,0 +1,5 @@
+# Synthetic parser input ONLY. Not a usable download pin set.
+IMAGE_URL=https://cloud.debian.org/images/cloud/trixie/20251006-2257/debian-13-generic-amd64-20251006-2257.qcow2
+IMAGE_SHA256=0000000000000000000000000000000000000000000000000000000000000000
+TOR_URL=https://dist.torproject.org/torbrowser/14.5.8/tor-browser-linux-x86_64-14.5.8.tar.xz
+TOR_SHA256=0000000000000000000000000000000000000000000000000000000000000000

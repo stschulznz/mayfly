@@ -1,0 +1,41 @@
+# i2pd 2.56.0 (Debian trixie) options that guest/i2pd.conf may use, one section.key per line.
+# Each was validated against libi2pd/Config.cpp at tag 2.56.0 by the I2P design review.
+# An unknown key makes i2pd abort, so add a key here only after checking that source.
+addressbook.enabled
+bandwidth
+bob.enabled
+certsdir
+daemon
+floodfill
+http.address
+http.enabled
+http.port
+httpproxy.address
+httpproxy.addresshelper
+httpproxy.enabled
+httpproxy.port
+httpproxy.senduseragent
+i2cp.enabled
+i2pcontrol.enabled
+ipv4
+ipv6
+limits.transittunnels
+log
+loglevel
+meshnets.yggdrasil
+nat
+nettime.enabled
+nettime.frompeers
+notransit
+ntcp2.enabled
+ntcp2.published
+persist.addressbook
+persist.profiles
+reseed.threshold
+reseed.verify
+sam.enabled
+socksproxy.enabled
+ssu2.enabled
+ssu2.published
+trust.enabled
+upnp.enabled
