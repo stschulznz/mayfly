@@ -1,8 +1,8 @@
 # Mayfly
 
-Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: only a one-session-per-entry packet-counter check has been run (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
+Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: a packet-counter check has passed but isn't a proof (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
 
-**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. It is a privacy tool, not a guarantee of anonymity, and its leak testing is limited to one session per entry on one host (see [Tested](#tested)), so don't stake your safety on it yet.
+**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. It is a privacy tool, not a guarantee of anonymity, and its leak testing is limited to a single host (see [Tested](#tested)), so don't stake your safety on it yet.
 
 Licence: [MIT](LICENSE).
 
@@ -34,7 +34,7 @@ Mayfly is for visiting sites without leaving a record of the visit on your compu
 
 What you get when the session ends and you shut the machine down or lock it as you normally would:
 
-- **No browsing record on your computer.** By design, history, cookies, caches, bookmarks and downloads are written to a RAM-backed overlay and discarded. One live check supports this (see [Tested](#tested)). Nothing in your normal browser or home directory ever saw the visit.
+- **No browsing record on your computer.** By design, history, cookies, caches, bookmarks and downloads are written to a RAM-backed overlay and discarded. A live check supports this (see [Tested](#tested)). Nothing in your normal browser or home directory ever saw the visit.
 - **No record of the visit in your desktop's normal network setup.** Your desktop's own connection doesn't carry the traffic to the sites; only the encrypted tunnel to your VPN does. Your router and internet provider can still see that tunnel.
 
 What this doesn't mean, and why the claim "no trace" is not safe to make:
@@ -67,7 +67,7 @@ Tor Browser -----+---- private UNIX socket ---- gateway VM
 - Each session gets fresh qcow2 overlays on a RAM-backed `tmpfs` over two read-only base images that you build once. The guests get 1 GiB and 4 GiB of RAM, and each overlay file has a hard 3 GiB growth ceiling.
 - The launcher configures no shared folder and no download export. Downloads, bookmarks and guest-side changes are lost with the session.
 
-These are implemented controls. Only a one-session-per-entry packet-counter check that nothing falls back to a direct path has been run (see [Tested](#tested)).
+These are implemented controls. A packet-counter check that nothing falls back to a direct path has passed (see [Tested](#tested)).
 
 The exact QEMU arguments are in [`lib/runtime.sh`](lib/runtime.sh). The guest firewall is in [`lib/policy.sh`](lib/policy.sh) and [`guest/network.sh`](guest/network.sh).
 
@@ -234,12 +234,12 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
-| RAM-only writes, one Firefox session (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
-| Leak test, all three entries (run mode 1) | One session per entry on that host, with per-user packet counters. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
-| Tunnel-down test, one session (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). Only one short session was observed. |
+| RAM-only writes (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
+| Leak test, all three entries (run mode 1) | Per-user packet counters on that host. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
+| Tunnel-down test (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). |
 | Other distributions | **Not live-tested.** |
 
-The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
+Each live test above was run on a single host. The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
 
 On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. A bookmark made in one session was absent from the next, and sessions shut down cleanly. In dedicated-user mode, the VM processes were owned by the service user, and the state directory was `root:root` mode `0711`. Other processes of the desktop user were denied `/proc/<pid>/mem` of the VMs, the profile and the session directory, and the Wayland socket ACL was revoked after each session. The VMs ran in the same unconfined SELinux domain (`unconfined_t`) as the desktop user.
 
@@ -247,7 +247,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 - Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); repeated runs, tunnel loss in the middle of a session, and the other failure paths remain unverified.
 - Restart paths, tunnel loss in the middle of a session, and a gateway or router crash. The startup case with an unreachable endpoint was observed once.
-- Repeated and longer RAM-only write checks. One session was observed (see above).
+- Longer and repeated runs of the tests above.
 - Update suppression in either browser, especially Tor Browser.
 - Firefox's active policies (`about:policies`) and content sandbox.
 - An SELinux denial survey.
