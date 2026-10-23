@@ -17,6 +17,7 @@ Licence: [MIT](LICENSE).
 - [Requirements](#requirements)
 - [Install packages](#install-packages)
 - [Quick start](#quick-start)
+- [Advanced](#advanced)
 - [Tested](#tested)
 - [Windows](#windows)
 - [Reference](#reference)
@@ -188,49 +189,48 @@ Preflight leaves out packages that are already present, so your output may be sh
 
 ## Quick start
 
-This is the shortest path for run mode 2 on a native host. [DEPLOYMENT.md](DEPLOYMENT.md) explains each step, including how to verify downloads and how to use run mode 1.
+This is the shortest path for run mode 2 (your own user, native host). Mayfly keeps everything it needs in `~/.local/state/mayfly` (or `$MAYFLY_HOME`, or `$XDG_STATE_HOME/mayfly`).
 
 ```bash
-git clone https://github.com/stschulznz/mayfly.git
-cd mayfly
+git clone https://github.com/stschulznz/mayfly.git && cd mayfly
 bash mayfly.sh preflight
+(umask 077; mkdir -p ~/.local/state/mayfly/secrets) && install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+bash mayfly.sh setup --core-policy
+bash mayfly.sh launch --core-policy
 ```
 
-1. Install any missing packages that preflight lists, then run preflight again.
-2. Create a pins file with verified download URLs and SHA-256 digests. See [Get and verify downloads](DEPLOYMENT.md#2-get-and-verify-downloads).
-3. Build the bases. Use absolute paths. The destination must not exist, and its parent must be yours with mode `0700`:
+1. `preflight` changes nothing. It prints the package install command for your system. Run that command, then run `preflight` again until it says `Ready for the next step`.
+2. Place your WireGuard profile at the default path, mode `0600`, in the [restricted format](#wireguard-profile-format). If you skip this, `setup` creates the directories, tells you where the file goes and stops. Run it again after you place the file.
+3. `setup` checks the profile, downloads and verifies Debian and Tor Browser (it shows exact versions and URLs and asks `Continue? [y/N]`), then builds the base. Each step is skipped when it's already done, so it's safe to run again.
+4. `launch` starts the newest base. Pick an entry in the chooser and keep the terminal open. Close the browser to end the session. The VMs stop and the session's RAM files are removed.
 
-   ```bash
-   LIBGUESTFS_BACKEND=direct bash mayfly.sh build /abs/path/build.pins /abs/path/bases/base-01
-   ```
+`--core-policy` is only needed when your host pipes core dumps to a collector such as `apport` or `systemd-coredump`. When the host already satisfies the requirement, it changes nothing. Otherwise it runs `sudo sysctl` to set `kernel.core_pattern=/dev/null` and `fs.suid_dumpable=0` for the whole host, and undoes that on exit only if it applied the change and no QEMU process is running. Before you launch, close other work and don't hibernate. See [Core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy).
 
-4. If `sysctl kernel.core_pattern` starts with `|` (as with `apport` or `systemd-coredump`), apply the [temporary core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy) first. `check-profile`, `doctor` and `launch` refuse piped core handlers.
-5. Put your WireGuard profile in a private location and check it:
+Run mode 1 (dedicated user) takes three commands after the packages: `sudo bash host/install-host.sh`, `sudo mayfly setup`, `sudo mayfly launch --core-policy`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 
-   ```bash
-   bash mayfly.sh check-profile /abs/path/secrets/wireguard.conf
-   ```
+## Advanced
 
-6. Check the host:
+`setup` runs these commands in order. You can run each one yourself:
 
-   ```bash
-   scratch=$(mktemp -d /dev/shm/mayfly-check.XXXXXXXX)
-   bash mayfly.sh doctor "$scratch"; rmdir -- "$scratch"
-   ```
+```bash
+bash mayfly.sh check-profile [--core-policy] [ABSOLUTE-PROFILE-FILE]
+bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]
+bash mayfly.sh build [PINS-FILE] [NAME]
+bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY
+bash mayfly.sh launch [--core-policy] [NAME]
+bash mayfly.sh core-policy apply|restore|status
+```
 
-7. Before you launch, close other work, don't hibernate, and keep the core-dump policy on until every session ends. Launch prints this reminder too. Keep the terminal open, and pick an entry in the chooser:
-
-   ```bash
-   bash mayfly.sh launch /abs/path/bases/base-01 /abs/path/secrets/wireguard.conf
-   ```
-
-Close the browser to end the session. The VMs stop and the session's RAM files are removed.
+- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
+- `build` names the base `base-YYYYMMDD` unless you give a name, and never overwrites an existing base.
+- The absolute-path forms still work and are what the dedicated-user wrapper uses: `build ABS-PINS ABS-NEW-BASE` and `launch ABS-BASE ABS-PROFILE [RAM-PARENT]`.
+- [DEPLOYMENT.md](DEPLOYMENT.md#manual-and-advanced-steps) has the manual steps, host diagnostics, the leak test and troubleshooting.
 
 ## Tested
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (382 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (505 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
@@ -263,19 +263,27 @@ WSL2 support is planned. It isn't available yet.
 
 ```text
 bash mayfly.sh preflight
+bash mayfly.sh setup [--core-policy] [--yes]
+bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]
+bash mayfly.sh build [PINS-FILE] [NAME | NEW-BASE-DIRECTORY]
+bash mayfly.sh launch [--core-policy] [NAME]
+bash mayfly.sh check-profile [--core-policy] [PROFILE-FILE]
+bash mayfly.sh core-policy apply|restore|status
 bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY
-bash mayfly.sh check-profile ABSOLUTE-PROFILE-FILE
 bash mayfly.sh build ABSOLUTE-PINS-FILE NEW-BASE-DIRECTORY
 bash mayfly.sh launch BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]
 ```
 
 - `preflight` lists missing tools and prints an install command. It changes nothing.
+- `setup` runs preflight, creates the state directory, checks the profile, fetches pins and builds a base, skipping finished steps. It never reads or prints the profile when it's missing.
+- `fetch-pins` downloads and verifies the Debian image and Tor Browser, then writes the pins file. It refuses to overwrite an existing pins file.
 - `doctor` checks prerequisites only: it never tests live routing or full operational readiness. It exits `78` when it refuses the host.
-- `check-profile` parses a profile locally and prints no keys. It doesn't contact the provider or prove the keys work.
-- `build` downloads the pinned images, installs guest packages and writes two bases. It never accepts a VPN profile.
-- `launch` starts a session. `RAM-PARENT` defaults to `/dev/shm`, and the launcher creates its own `0700` subdirectory there. The resulting session path must be shorter than 75 characters, because of the UNIX socket limit.
+- `check-profile` parses a profile locally and prints no keys. It doesn't contact the provider or prove the keys work. Without a path it checks the default profile.
+- `build` downloads the pinned images, installs guest packages and writes two bases. It never accepts a VPN profile and never overwrites a base.
+- `launch` starts a session. With no base it uses the newest one. `RAM-PARENT` defaults to `/dev/shm`, and the launcher creates its own `0700` subdirectory there. The resulting session path must be shorter than 75 characters, because of the UNIX socket limit.
+- `core-policy` applies, restores or shows the temporary core-dump policy. `restore` refuses while any QEMU process exists.
 
-Run mode 1 uses `sudo mayfly doctor`, `check-profile`, `build NAME`, `launch [--diag] [--display wayland-N] NAME`, `status`, `stop` and `cleanup`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
+Run mode 1 uses `sudo mayfly setup`, `fetch-pins`, `doctor`, `check-profile [--core-policy]`, `build [NAME]`, `launch [--core-policy] [--diag] [--display wayland-N] [NAME]`, `core-policy`, `status`, `stop` and `cleanup`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 
 Use canonical absolute paths with no symlink components. For build and runtime data paths, use only letters, digits, `_`, `.`, `/` and `-`.
 

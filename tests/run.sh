@@ -254,11 +254,11 @@ check 'profile CLI parses protected synthetic input only when dump policy permit
 check 'no command rejected' exit_is 64
 check 'unknown command rejected' exit_is 64 anything
 check 'extra profile argument rejected' exit_is 64 check-profile "$tmp/profile.conf" extra
-check 'missing profile argument rejected' exit_is 64 check-profile
+check 'relative profile argument rejected' exit_is 64 check-profile relative.conf
 check 'extra doctor argument rejected' exit_is 64 doctor "$tmp" extra
 check 'missing doctor argument rejected' exit_is 64 doctor
-check 'build needs explicit pins and new output path' exit_is 64 build
-check 'launch needs explicit base and profile paths' exit_is 64 launch
+check 'build rejects extra arguments and non-name, non-path words' exit_is 64 build /a /b /c
+check 'launch rejects relative base paths with extra arguments' exit_is 64 launch a/b c d e
 check 'QEMU passthrough rejected' exit_is 64 launch -netdev user
 check 'build passthrough rejected' exit_is 64 build --unsafe
 doctor_never_claims_readiness() {
@@ -276,5 +276,6 @@ source "$project/tests/host-tests.sh"
 source "$project/tests/i2p-tests.sh"
 source "$project/tests/preflight-tests.sh"
 source "$project/tests/capture-tests.sh"
+source "$project/tests/setup-tests.sh"
 printf '\n%s passed, %s failed. OFFLINE component checks, not live VM acceptance.\n' "$passed" "$failed"
 (( failed == 0 ))

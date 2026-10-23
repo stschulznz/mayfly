@@ -197,12 +197,8 @@ repair_profile() (
     mf_test_profile_cli() {
         local file=$1 root=$2
         mf_profile_dump_guard() { :; } # Synthetic dump-safe CLI body only.
-        source <(repair_source _ mayfly.sh |
-            sed -n '/^    check-profile)/,/^    build)/{
-                /^    check-profile)/d; /^    build)/d; s/ ;;$//; p;
-            }' |
-            sed '/^        mf_\(private_profile_file\|open_profile\|profile_dump_guard\|parse_profile\) /s/$/ || return 1/') \
-            check-profile "$file"
+        source <(repair_source _ lib/state.sh)
+        mf_profile_check "$file"
     }
     case $scenario in
         stable) ;;

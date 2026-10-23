@@ -60,7 +60,7 @@ check 'launch option parsing accepts valid forms' \
     mf_sub 'mf_parse_launch test-09 && [[ $MF_ARG_DIAG == 0 && $MF_ARG_NAME == test-09 ]]
         mf_parse_launch --diag --display wayland-1 test-09 && [[ $MF_ARG_DIAG == 1 && $MF_ARG_DISPLAY == wayland-1 ]]'
 check 'launch option parsing rejects unknown options, missing and duplicate names' \
-    mf_sub '! mf_parse_launch --bogus x && ! mf_parse_launch && ! mf_parse_launch a b && ! mf_parse_launch --display'
+    mf_sub '! mf_parse_launch --bogus x && ! mf_parse_launch a b && ! mf_parse_launch --display && mf_parse_launch && [[ -z $MF_ARG_NAME ]]'
 
 check 'launch command uses a clean environment and only fixed paths' \
     mf_sub 'mf_launch_cmd test-09 0 /run/mayfly/wayland-0

@@ -20,10 +20,13 @@ MF_WRAPPER=/usr/local/sbin/mayfly
 MF_RUNTIME_FILES=(
     mayfly.sh
     lib/build.sh
+    lib/corepolicy.sh
     lib/host.sh
+    lib/pins.sh
     lib/policy.sh
     lib/preflight.sh
     lib/runtime.sh
+    lib/state.sh
     guest/browser-prepare.sh
     guest/desktop.sh
     guest/diag.sh
@@ -199,6 +202,24 @@ mf_install_private_file() {
     rm -f -- "$tmp"
 }
 
+# Print the invoking user's default state-directory file when it is a plain
+# file there and not yet installed (or --replace was given). The content still
+# goes through mf_read_user_file, which checks the opened object.
+mf_default_user_file() {
+    local rel=$1 dest=$2 label=$3 home file
+    [[ -n ${SUDO_USER:-} && ${SUDO_UID:-} =~ ^[1-9][0-9]*$ ]] || return 1
+    home=$(getent passwd "$SUDO_USER" | cut -d: -f6) || return 1
+    [[ $home == /* ]] || return 1
+    file=$home/.local/state/mayfly/$rel
+    [[ -f $file && ! -L $file ]] || return 1
+    if [[ -e $dest && $MF_REPLACE != 1 ]]; then
+        printf 'The %s is already installed; keeping it (add --replace to overwrite).\n' "$label" >&2
+        return 1
+    fi
+    printf 'Using your %s from %s\n' "$label" "$file" >&2
+    printf '%s\n' "$file"
+}
+
 mf_install_main() {
     local profile='' pins='' allow_dirty=0 expect_rev=''
     MF_DRY=0 MF_REPLACE=0
@@ -230,6 +251,12 @@ mf_install_main() {
     mf_ensure_user
     mf_ensure_state
     mf_install_tree
+    if [[ -z $profile ]]; then
+        profile=$(mf_default_user_file secrets/wireguard.conf "$MF_STATE/secrets/wireguard.conf" profile) || profile=''
+    fi
+    if [[ -z $pins ]]; then
+        pins=$(mf_default_user_file pins/build.pins "$MF_STATE/pins/build.pins" 'pins file') || pins=''
+    fi
     if [[ -n $profile ]]; then
         mf_install_private_file 'profile' "$profile" "$MF_STATE/secrets/wireguard.conf" 16384
     fi
@@ -243,10 +270,9 @@ mf_install_main() {
         'The installer ran files from your user-writable checkout as root. Review' \
         'the diff of host/ and lib/ against your last trusted commit before you rely on it.' \
         'Done. Next, as your normal user:' \
-        '  sudo mayfly check-profile' \
-        '  sudo mayfly doctor' \
-        '  sudo mayfly build NAME' \
-        '  sudo mayfly launch NAME' \
+        '  sudo mayfly setup' \
+        '  sudo mayfly launch --core-policy' \
+        'Step by step instead: sudo mayfly check-profile --core-policy, doctor, fetch-pins, build, launch.' \
         'If sudo cannot find the command, use /usr/local/sbin/mayfly.' \
         'Your own copies of the profile and old bases are no longer used; delete them.'
 }

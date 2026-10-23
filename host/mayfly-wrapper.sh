@@ -26,14 +26,20 @@ mf_die() {
 
 mf_usage() {
     printf '%s\n' \
-        'Usage: sudo mayfly doctor' \
-        '       sudo mayfly check-profile' \
-        '       sudo mayfly build NEW-BASE-NAME' \
-        '       sudo mayfly launch [--diag] [--display wayland-N] BASE-NAME' \
+        'First run: sudo mayfly setup, then sudo mayfly launch --core-policy' \
+        'Usage: sudo mayfly setup [--yes]' \
+        '       sudo mayfly fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z]' \
+        '       sudo mayfly doctor' \
+        '       sudo mayfly check-profile [--core-policy]' \
+        '       sudo mayfly build [NEW-BASE-NAME]' \
+        '       sudo mayfly launch [--core-policy] [--diag] [--display wayland-N] [BASE-NAME]' \
+        '       sudo mayfly core-policy apply|restore|status' \
         '       sudo mayfly status' \
         '       sudo mayfly stop' \
         '       sudo mayfly cleanup' \
         'Everything runs as the dedicated user. Base names are letters, digits, _ and -.' \
+        'build without a name creates base-YYYYMMDD. launch without a name uses the newest base.' \
+        '--core-policy applies the host-wide core-dump policy if needed and undoes it afterwards.' \
         'cleanup revokes leftover socket access and removes orphaned VMs when no session runs.' \
         '--diag writes nonsecret counters readable only by that user and root.'
 }
@@ -70,12 +76,14 @@ mf_wayland_name() {
     printf '%s\n' "${found[0]}"
 }
 
-# Parse "launch" options into MF_ARG_DIAG, MF_ARG_DISPLAY and MF_ARG_NAME.
+# Parse "launch" options into MF_ARG_DIAG, MF_ARG_DISPLAY, MF_ARG_CORE and
+# MF_ARG_NAME. An empty name means the newest base.
 mf_parse_launch() {
-    MF_ARG_DIAG=0 MF_ARG_DISPLAY='' MF_ARG_NAME=''
+    MF_ARG_DIAG=0 MF_ARG_DISPLAY='' MF_ARG_NAME='' MF_ARG_CORE=0
     while (( $# )); do
         case $1 in
             --diag) MF_ARG_DIAG=1; shift ;;
+            --core-policy) MF_ARG_CORE=1; shift ;;
             --display)
                 (( $# >= 2 )) || return 1
                 MF_ARG_DISPLAY=$2; shift 2 ;;
@@ -85,7 +93,53 @@ mf_parse_launch() {
                 MF_ARG_NAME=$1; shift ;;
         esac
     done
-    mf_valid_name "$MF_ARG_NAME"
+    [[ -z $MF_ARG_NAME ]] || mf_valid_name "$MF_ARG_NAME"
+}
+
+# Parse "fetch-pins" options into the MF_FP_ARGS array. Only fixed, validated
+# words reach the service user; there is no caller-chosen path.
+mf_parse_fetch_pins() {
+    MF_FP_ARGS=()
+    while (( $# )); do
+        case $1 in
+            --yes) MF_FP_ARGS+=(--yes); shift ;;
+            --debian)
+                (( $# >= 2 )) && [[ $2 =~ ^[0-9]{8}-[0-9]{1,9}$ ]] || return 1
+                MF_FP_ARGS+=(--debian "$2"); shift 2 ;;
+            --tor)
+                (( $# >= 2 )) && [[ $2 =~ ^[0-9]+(\.[0-9]+)+$ && ${#2} -le 24 ]] || return 1
+                MF_FP_ARGS+=(--tor "$2"); shift 2 ;;
+            *) return 1 ;;
+        esac
+    done
+}
+
+# Print the newest base name: latest browser.sha256 time, then name. A base is
+# a directory of the service user holding both images.
+mf_newest_base() {
+    local entry name svc stamp
+    local -a rows=()
+    svc=$(id -u "$MF_USER")
+    for entry in "$MF_STATE/bases"/*; do
+        name=${entry##*/}
+        mf_valid_name "$name" && [[ -d $entry && ! -L $entry &&
+            -f $entry/gateway.qcow2 && -f $entry/browser.qcow2 &&
+            $(stat -c %u "$entry") == "$svc" ]] || continue
+        stamp=$(stat -c %Y "$entry/browser.sha256" 2>/dev/null) ||
+            stamp=$(stat -c %Y "$entry/browser.qcow2") || continue
+        rows+=("$stamp $name")
+    done
+    (( ${#rows[@]} )) || return 1
+    printf '%s\n' "${rows[@]}" | sort -k1,1nr -k2,2r | { read -r _ name; printf '%s\n' "$name"; }
+}
+
+# The core-policy helpers live in the verified install tree. Load them only
+# after mf_check_install, and keep the snapshot under root-owned state.
+mf_load_core_policy() {
+    source "$MF_PROG/lib/policy.sh"
+    source "$MF_PROG/lib/host.sh"
+    source "$MF_PROG/lib/corepolicy.sh"
+    MF_CORE_STATE=$MF_STATE
 }
 
 # Build the command that runs the project as the service user, with a clean
@@ -141,17 +195,67 @@ mf_cmd_doctor() {
 }
 
 mf_cmd_check_profile() {
+    local core=0
+    while (( $# )); do
+        case $1 in
+            --core-policy) core=1; shift ;;
+            *) mf_usage >&2; exit 64 ;;
+        esac
+    done
     mf_check_install
-    mf_run_as bash "$MF_PROG/mayfly.sh" check-profile "$MF_STATE/secrets/wireguard.conf"
+    if (( core )); then
+        mf_load_core_policy
+        mf_core_guarded mf_run_as bash "$MF_PROG/mayfly.sh" check-profile "$MF_STATE/secrets/wireguard.conf"
+    else
+        mf_run_as bash "$MF_PROG/mayfly.sh" check-profile "$MF_STATE/secrets/wireguard.conf"
+    fi
+}
+
+mf_cmd_fetch_pins() {
+    mf_parse_fetch_pins "$@" || { mf_usage >&2; exit 64; }
+    mf_check_install
+    mf_run_as "MAYFLY_HOME=$MF_STATE" bash "$MF_PROG/mayfly.sh" fetch-pins "${MF_FP_ARGS[@]}"
 }
 
 mf_cmd_build() {
     local name=${1:-}
+    [[ -n $name ]] || name=base-$(date +%Y%m%d)
     mf_valid_name "$name" || mf_die 'a valid new base name is required' 64
     mf_check_install
-    [[ -f $MF_STATE/pins/build.pins ]] || mf_die 'no pins file; run the installer with --pins'
+    [[ -f $MF_STATE/pins/build.pins ]] || mf_die 'no pins file; run: sudo mayfly fetch-pins'
+    [[ ! -e $MF_STATE/bases/$name && ! -L $MF_STATE/bases/$name ]] ||
+        mf_die "base $name already exists; builds never overwrite. Pick another name"
     mf_run_as LIBGUESTFS_BACKEND=direct bash "$MF_PROG/mayfly.sh" build \
         "$MF_STATE/pins/build.pins" "$MF_STATE/bases/$name"
+}
+
+mf_cmd_setup() {
+    local arg
+    local -a yes=()
+    for arg in "$@"; do
+        [[ $arg == --yes ]] || { mf_usage >&2; exit 64; }
+        yes=(--yes)
+    done
+    mf_check_install
+    [[ -f $MF_STATE/secrets/wireguard.conf ]] ||
+        mf_die 'the WireGuard profile is missing; rerun the installer with --profile (or put it at ~/.local/state/mayfly/secrets/wireguard.conf first)'
+    if [[ -f $MF_STATE/pins/build.pins ]]; then
+        printf '%s\n' 'already done: pins file exists'
+    else
+        mf_run_as "MAYFLY_HOME=$MF_STATE" bash "$MF_PROG/mayfly.sh" fetch-pins "${yes[@]}"
+    fi
+    if mf_newest_base >/dev/null; then
+        printf 'already done: base %s\n' "$(mf_newest_base)"
+    else
+        mf_cmd_build
+    fi
+    printf '%s\n' 'Setup finished. Next: sudo mayfly launch --core-policy'
+}
+
+mf_cmd_core_policy() {
+    mf_check_install
+    mf_load_core_policy
+    mf_core_cmd "$1"
 }
 
 mf_cmd_launch() {
@@ -159,6 +263,9 @@ mf_cmd_launch() {
     mf_parse_launch "$@" || { mf_usage >&2; exit 64; }
     mf_check_install
     svc=$(id -u "$MF_USER")
+    if [[ -z $MF_ARG_NAME ]]; then
+        MF_ARG_NAME=$(mf_newest_base) || mf_die 'no base found; run: sudo mayfly setup'
+    fi
     base=$MF_STATE/bases/$MF_ARG_NAME
     [[ -d $base && $(stat -c '%u:%a' "$base") == "$svc:700" ]] ||
         mf_die "base $MF_ARG_NAME was not found or is not owned by $MF_USER"
@@ -171,8 +278,19 @@ mf_cmd_launch() {
         mf_die 'the Wayland socket is not owned by the invoking user'
     # A private mount namespace keeps the socket bind mount invisible to the
     # rest of the system and removes it automatically when the session ends.
+    if [[ $MF_ARG_CORE == 1 ]]; then
+        # Not exec: this shell must outlive the session to undo the policy.
+        mf_load_core_policy
+        mf_core_guarded mf_launch_ns "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME"
+        return
+    fi
     exec env MF_IN_NS=1 unshare --mount --propagation private -- \
         "$MF_SELF" __ns-launch "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME"
+}
+
+mf_launch_ns() {
+    env MF_IN_NS=1 unshare --mount --propagation private -- \
+        "$MF_SELF" __ns-launch "$@"
 }
 
 MF_NS_TARGET=''
@@ -293,8 +411,14 @@ mf_main() {
     shift
     case $command in
         doctor) (( $# == 0 )) || { mf_usage >&2; exit 64; }; mf_cmd_doctor ;;
-        check-profile) (( $# == 0 )) || { mf_usage >&2; exit 64; }; mf_cmd_check_profile ;;
-        build) (( $# == 1 )) || { mf_usage >&2; exit 64; }; mf_cmd_build "$1" ;;
+        check-profile) mf_cmd_check_profile "$@" ;;
+        fetch-pins) mf_cmd_fetch_pins "$@" ;;
+        setup) mf_cmd_setup "$@" ;;
+        build) (( $# <= 1 )) || { mf_usage >&2; exit 64; }; mf_cmd_build "${1:-}" ;;
+        core-policy)
+            (( $# == 1 )) && [[ $1 == apply || $1 == restore || $1 == status ]] ||
+                { mf_usage >&2; exit 64; }
+            mf_cmd_core_policy "$1" ;;
         launch) mf_cmd_launch "$@" ;;
         status) mf_cmd_status ;;
         stop) mf_cmd_stop ;;

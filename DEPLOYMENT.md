@@ -1,8 +1,40 @@
 # Deploy Mayfly
 
-This guide takes you from a fresh host to a first browsing session. It covers run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. Steps 11 to 13 cover rebuilding bases, the leak test and troubleshooting. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
+This guide takes you from a fresh host to a first browsing session. The [Quick path](#quick-path) is the short version. Everything after it is the manual and advanced detail: run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. Steps 11 to 13 cover rebuilding bases, the leak test and troubleshooting. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
 
 Mayfly is experimental. Live testing covers one host (Bazzite), and the commands here haven't been run on other distributions. See [Tested](README.md#tested).
+
+## Quick path
+
+Run mode 2, as your normal user in a desktop terminal on a native Wayland session:
+
+```bash
+bash mayfly.sh preflight
+(umask 077; mkdir -p ~/.local/state/mayfly/secrets) && install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+bash mayfly.sh setup --core-policy
+bash mayfly.sh launch --core-policy
+```
+
+- `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision.
+- The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`, and Mayfly refuses symlinks and loose modes instead of repairing them. Without the profile, `setup` creates the directories, prints where the file goes and exits `0`. Run it again after you place the file. It never reads or prints the profile at that point.
+- `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so you can run it again. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips this review. It refuses to run without a terminal and without `--yes`.
+- Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
+- `--core-policy` applies the [temporary core-dump policy](#9-temporary-core-dump-policy) only when the host doesn't already meet it. It asks `sudo` for `sysctl`, because it changes crash-dump behaviour for the whole host, and restores the saved values on exit only if it applied them and no QEMU process runs. In `setup` it covers the profile check only. Without the flag, `setup` stops with the remedy if the host blocks the check.
+- `launch` starts the newest base with the default profile. Close other work and don't hibernate until every session ends.
+
+Run mode 1 (dedicated `mayfly` user), after the packages are installed and the profile is at the default path:
+
+```bash
+sudo bash host/install-host.sh
+sudo mayfly setup
+sudo mayfly launch --core-policy
+```
+
+The installer uses `~/.local/state/mayfly/secrets/wireguard.conf` and `pins/build.pins` from the user who ran `sudo`, if they exist, through its safe-read path. Pass `--profile` or `--pins` to use other files. [Step 10](#10-run-as-a-dedicated-user-mode-1) explains what it installs, and you should review it before you run it.
+
+## Manual and advanced steps
+
+The numbered steps below do the same work by hand, with the downloads and core-dump policy spelled out. Use them to verify what the commands above do, to choose your own paths, or when something fails.
 
 Conventions:
 
@@ -34,7 +66,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `382 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `505 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -64,6 +96,8 @@ For each distribution, check these hazards now:
 ## 2. Get and verify downloads
 
 A base is built from two downloads: a Debian 13 cloud image and the Tor Browser archive. You pin both by SHA-256 in a pins file. Build checks the pins, but a locally computed digest alone doesn't authenticate a download, so verify the downloads first.
+
+`bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]` automates this step. It finds the newest `YYYYMMDD-N` directory in the Debian index and the latest stable version in Tor's `downloads.json` (only numeric versions, so alpha and rc strings are refused), shows both with their URLs, and applies the same checks as the block below. It writes the pins file only if every check passes, and leaves no pins file when one fails. The manual block remains the reference for what is checked.
 
 Keep the pins file and everything you download outside Git. The pins file is literal `key=value` data, never shell. See the [pins file reference](README.md#pins-file).
 
@@ -136,7 +170,7 @@ Building is a network-enabled maintenance step. It downloads the pinned artifact
 )
 ```
 
-The destination must not exist. Its parent must be yours with mode `0700` and outside the source repository. The build can take several minutes. It uses libguestfs's direct backend. The [`virt-customize`](https://github.com/libguestfs/guestfs-tools/blob/master/customize/virt-customize.pod) and [`virt-resize`](https://github.com/libguestfs/guestfs-tools/blob/master/resize/virt-resize.pod) documentation owns those tools' behavior, and the build sequence is in [`lib/build.sh`](lib/build.sh).
+The destination must not exist. Its parent must be yours with mode `0700` and outside the source repository. `bash mayfly.sh build` with no arguments does this with the state-directory pins and a new `base-YYYYMMDD` name, and refuses to overwrite an existing base. The build can take several minutes. It uses libguestfs's direct backend. The [`virt-customize`](https://github.com/libguestfs/guestfs-tools/blob/master/customize/virt-customize.pod) and [`virt-resize`](https://github.com/libguestfs/guestfs-tools/blob/master/resize/virt-resize.pod) documentation owns those tools' behavior, and the build sequence is in [`lib/build.sh`](lib/build.sh).
 
 Expected: `Build finished`, and `base-01` contains `gateway.qcow2` and `browser.qcow2`, each 16 GiB virtual, mode `0444`, with a `.sha256` file. Hashes are published last. A nonzero exit means **don't launch**, even if some output files exist. A failed build leaves partial nonsecret artifacts for diagnosis. Retry with a new destination name, and never edit a base or write a hash file by hand.
 
@@ -161,7 +195,7 @@ Copy the file into your private state directory without printing it:
 )
 ```
 
-Your original file and this copy both stay on disk. Mayfly makes no secure-deletion claim.
+Your original file and this copy both stay on disk. Mayfly makes no secure-deletion claim. The default path is what `check-profile`, `launch` and `setup` use when you give no path.
 
 ## 5. Check the profile and run doctor
 
@@ -193,6 +227,8 @@ Launch in the foreground, as your desktop user:
 ```bash
 bash mayfly.sh launch "$MF_STATE/bases/base-01" "$MF_STATE/secrets/wireguard.conf" /dev/shm
 ```
+
+`bash mayfly.sh launch` with no arguments does the same with the newest base in the state directory and the default profile. `launch NAME` picks a named base.
 
 The gateway VM starts first, and the browser VM starts after the gateway's private socket appears. A socket is not a VPN handshake or a route check. A chooser window then lists the three entries. Pick one. Only one entry runs per session, so close the browser and launch again to switch.
 
@@ -277,7 +313,9 @@ When you report a problem, give the step number from this guide, the source revi
 
 A piped core collector (for example `apport` or `systemd-coredump`) can ignore `RLIMIT_CORE`, so zero process limits aren't enough. A crashed QEMU could leave VM memory, which holds your session and the WireGuard key, in a core file. `doctor`, `check-profile` and `launch` therefore refuse a host that has a piped pattern or `fs.suid_dumpable` other than `0`. See [core(5)](https://man7.org/linux/man-pages/man5/core.5.html) and the [kernel `suid_dumpable` definition](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/fs.html#suid-dumpable).
 
-**Impact:** this changes crash diagnostics for every application on the host. It's a temporary opt-in, and it creates no sysctl drop-in, service mask or SELinux change. Mayfly never changes it for you. Keep it active for the whole life of the VMs, and restore it only after they're gone.
+**Impact:** this changes crash diagnostics for every application on the host. It's a temporary opt-in, and it creates no sysctl drop-in, service mask or SELinux change. Mayfly changes it only when you ask, with `core-policy apply` or the `--core-policy` flag. Keep it active for the whole life of the VMs, and restore it only after they're gone.
+
+**Automated form.** `bash mayfly.sh core-policy apply|restore|status` does what the two blocks below do. `apply` does nothing if the host already meets the requirement (a non-piped pattern and `fs.suid_dumpable=0`). Otherwise it saves the original values once per boot to `<state>/core-policy/<boot_id>/original.conf` (directories `0700`, file `0600`, created with `noclobber`), then runs `sudo sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0`. Without `sudo` it stops with an error and changes nothing. `restore` reads the saved file once, validates it, and passes only those validated values to `sudo sysctl -w`, never the file itself. Run as a normal user, it accepts a piped saved pattern only when the first token is an absolute path to a root-owned executable, reached through root-owned directories that are not group or world writable and with no symlinks, and it accepts a plain pattern only from a conservative character set. Anything else is refused with a message, because the snapshot lives in your own state directory and other programs that run as you could edit it. `restore` also refuses while any QEMU process exists or the check fails. In that case restore the original values by hand with `sysctl -w`, or in mode 1 run `sudo mayfly core-policy restore`, which reads the root-owned snapshot. `status` only reads. With `--core-policy` on `launch`, `check-profile` or `setup`, Mayfly remembers whether it applied the policy and restores it on exit (including Ctrl+C, `SIGTERM` and `SIGHUP`) only if it did and no QEMU process is left. Otherwise it leaves the policy in place and tells you to run `core-policy restore` after the last session. A `SIGKILL` or a power loss skips the restore, so run `core-policy status` afterwards. In mode 1 the root wrapper does the same without `sudo`, with the snapshot under `/var/lib/mayfly/core-policy`, and `sudo mayfly core-policy ...` is available.
 
 Check the current values:
 
@@ -291,7 +329,8 @@ Save the original values, once per boot, then apply the policy. The block refuse
 (
   set -euo pipefail
   boot=$(cat /proc/sys/kernel/random/boot_id)
-  saved="$MF_STATE/core-policy/$boot.conf"
+  saved="$MF_STATE/core-policy/$boot/original.conf"
+  mkdir -p -m 700 -- "$MF_STATE/core-policy/$boot"
   if [[ ! -e $saved ]]; then
     pattern=$(sysctl -n kernel.core_pattern)
     suid=$(sysctl -n fs.suid_dumpable)
@@ -319,23 +358,26 @@ Expected: `kernel.core_pattern = /dev/null` and `fs.suid_dumpable = 0`. If only 
 (
   set -euo pipefail
   boot=$(cat /proc/sys/kernel/random/boot_id)
-  saved="$MF_STATE/core-policy/$boot.conf"
+  saved="$MF_STATE/core-policy/$boot/original.conf"
   [[ -f $saved && ! -L $saved ]]
   [[ $(stat -c '%u:%a:%h' "$saved") == "$UID:600:1" ]]
   mapfile -t original < "$saved"
   [[ ${#original[@]} == 2 && ${original[0]} == kernel.core_pattern=?* ]]
   [[ ${original[1]} =~ ^fs.suid_dumpable=[012]$ ]]
+  pattern=${original[0]#kernel.core_pattern=}
+  suid=${original[1]#fs.suid_dumpable=}
   status=0
   pgrep -f '[q]emu-system-' || status=$?
   [[ $status == 1 ]] || { echo 'QEMU remains or inspection failed: do not restore.' >&2; exit 1; }
-  read -r -p 'All VMs are gone and no launch is in progress? Type RESTORE: ' answer
+  printf 'Saved values: kernel.core_pattern=%s fs.suid_dumpable=%s\n' "$pattern" "$suid"
+  read -r -p 'Are these your original values (a pipe must name a root-owned handler), all VMs gone and no launch in progress? Type RESTORE: ' answer
   [[ $answer == RESTORE ]]
-  sudo sysctl -p "$saved"
+  sudo sysctl -w "kernel.core_pattern=$pattern" "fs.suid_dumpable=$suid"
   sysctl kernel.core_pattern fs.suid_dumpable
 )
 ```
 
-Expected: the original pattern and number return, including a piped pattern if that was your baseline. Keep the saved file. Don't run `sudo sysctl --system`. The [sysctl reference](https://man7.org/linux/man-pages/man8/sysctl.8.html) defines the explicit-file form. A reboot ends the old boot's policy and normally brings back your distribution's defaults. After a reboot, save a new baseline for that boot. Never replay an old boot's file.
+Expected: the original pattern and number return, including a piped pattern if that was your baseline. Keep the saved file. Don't run `sudo sysctl --system`, and don't pass the saved file to `sudo sysctl -p`: it sits in a directory your other programs can write to. The [sysctl reference](https://man7.org/linux/man-pages/man8/sysctl.8.html) defines `-w`. A reboot ends the old boot's policy and normally brings back your distribution's defaults. After a reboot, save a new baseline for that boot. Never replay an old boot's file.
 
 If the restore refuses because of an unrelated QEMU process, don't stop the other workload to satisfy it. Keep the restricted policy until you have accounted for every process.
 
@@ -353,7 +395,7 @@ What mode 1 doesn't protect against:
 - **The key.** The `mayfly` user holds the WireGuard key, so keep the account unused for anything else.
 - **The network and SELinux.** The VMs use the host's network stack through QEMU user-mode networking, and this mode adds no per-user egress filter. On the tested host both users ran in the same unconfined SELinux domain, so file permissions are the only separation. Check yours with `ps -Z -u mayfly`.
 
-Keep the core policy from step 9 active whenever you run `doctor` or `launch`.
+Keep the core policy from step 9 active whenever you run `doctor` or `launch`. In mode 1, `sudo mayfly launch --core-policy` and `sudo mayfly check-profile --core-policy` handle it for you: the wrapper (running as root, so without a `sudo` prompt) applies the policy if needed and restores it after the session only if it applied it and no QEMU process remains.
 
 ### Review, preview and install
 
@@ -367,6 +409,12 @@ bash host/install-host.sh --dry-run
 Replace `TRUSTED_COMMIT` with the commit you reviewed. The preview changes nothing. It refuses a tree that isn't a clean Git commit, so add `--allow-dirty` to preview uncommitted work.
 
 Install once. Replace `FULL_SHA_YOU_REVIEWED` with the full 40-character hash. The installer refuses a checkout at any other commit:
+
+```bash
+sudo bash host/install-host.sh --expect-rev FULL_SHA_YOU_REVIEWED
+```
+
+`--profile` and `--pins` are optional. When you omit them and the files exist in the invoking user's default state directory (`~/.local/state/mayfly/secrets/wireguard.conf` and `pins/build.pins`), the installer uses those through the same safe-read path. If the destination already holds a file, it keeps it unless you add `--replace`. Without a pins file, `sudo mayfly setup` fetches one as the `mayfly` user. To use other files, pass them explicitly:
 
 ```bash
 sudo bash host/install-host.sh --expect-rev FULL_SHA_YOU_REVIEWED \
@@ -386,16 +434,24 @@ It doesn't reboot, change networking or the firewall, or touch the core policy. 
 
 ### Build and launch
 
-Run these from a terminal in your desktop session:
+Run these from a terminal in your desktop session. The short form is two commands:
 
 ```bash
-sudo mayfly check-profile
-sudo mayfly doctor
-sudo mayfly build base-01
-sudo mayfly launch base-01
+sudo mayfly setup
+sudo mayfly launch --core-policy
 ```
 
-The build runs as the `mayfly` user and can take several minutes. `launch` needs exactly one Wayland socket in your session. If it can't pick one, list `wayland-*` in `$XDG_RUNTIME_DIR` and pass the name, for example `sudo mayfly launch --display wayland-1 base-01`. Add `--diag` for the diagnostics in step 8, which are then readable only by `mayfly` and root:
+`setup` fetches the pins (as the `mayfly` user, with the same confirmation prompt) and builds a base if they're missing, and stops if the profile isn't installed. The step-by-step form is:
+
+```bash
+sudo mayfly check-profile --core-policy
+sudo mayfly doctor
+sudo mayfly fetch-pins
+sudo mayfly build base-01
+sudo mayfly launch --core-policy base-01
+```
+
+`build` with no name creates `base-YYYYMMDD`, and `launch` with no name uses the newest base. The build runs as the `mayfly` user and can take several minutes. `launch` needs exactly one Wayland socket in your session. If it can't pick one, list `wayland-*` in `$XDG_RUNTIME_DIR` and pass the name, for example `sudo mayfly launch --display wayland-1 base-01`. Add `--diag` for the diagnostics in step 8, which are then readable only by `mayfly` and root:
 
 ```bash
 sudo bash -c 'cat /dev/shm/mayfly.*/browser-diag.log | cat -v'
@@ -461,7 +517,7 @@ sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo counter comment
 sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo ip daddr ENDPOINT_IP udp dport PORT counter comment '"endpoint"'
 ```
 
-Launch a session, use one entry, and open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then read the counters. Don't run `sudo mayfly build` while the rules exist, because the build downloads as that user and adds to the counts:
+Launch a session, use one entry, and open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then read the counters. Don't run `sudo mayfly build`, `fetch-pins` or `setup` while the rules exist, because they download as that user and add to the counts:
 
 ```bash
 sudo nft list table inet mfcap

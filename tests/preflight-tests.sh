@@ -101,4 +101,4 @@ mf_swap_case() { # swaps-file-content expected-substring
 check 'preflight warns about disk swap' mf_swap_case 'Filename Type Size Used Priority\n/swapfile file 1 0 -2\n' 'WARNING  disk swap is active'
 check 'preflight accepts zram-only swap' mf_swap_case 'Filename Type Size Used Priority\n/dev/zram0 partition 1 0 100\n' 'ok       no disk swap'
 check 'preflight accepts no swap' mf_swap_case 'Filename Type Size Used Priority\n' 'ok       no disk swap'
-check 'launch prints the do-not-hibernate reminder before starting' bash -c 'grep -B1 -A1 "do not hibernate" "$1/mayfly.sh" | grep -q mf_launch' _ "$project"
+check 'launch prints the do-not-hibernate reminder before starting' bash -c 'grep -q "do not hibernate" "$1/lib/corepolicy.sh" && grep -A3 "printf .%s.n. \"\$MF_REMINDER\"" "$1/lib/state.sh" | grep -q mf_launch' _ "$project"
