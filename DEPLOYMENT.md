@@ -1,10 +1,10 @@
 # Deploy Mayfly
 
-This guide takes you from a fresh host to a first browsing session. The [Quick path](#quick-path) is the short version. Everything after it is the manual and advanced detail: run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. Steps 11 to 13 cover rebuilding bases, the leak test and troubleshooting. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
+This guide takes you from a fresh host to a first browsing session. The [Quick start](#quick-start) is the short version. Everything after it is the manual and advanced detail: run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. Steps 11 to 13 cover rebuilding bases, the leak test and troubleshooting. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
 
 Mayfly is experimental. Live testing covers one host (Bazzite), and the commands here haven't been run on other distributions. See [Tested](README.md#tested).
 
-## Quick path
+## Quick start
 
 Run mode 2, as your normal user in a desktop terminal on a native Wayland session:
 
@@ -15,7 +15,7 @@ bash mayfly.sh setup --core-policy
 bash mayfly.sh launch --core-policy
 ```
 
-- `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision.
+- `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1](#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
 - The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`, and Mayfly refuses symlinks and loose modes instead of repairing them. Without the profile, `setup` creates the directories, prints where the file goes and exits `0`. Run it again after you place the file. It never reads or prints the profile at that point.
 - `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so you can run it again. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips this review. It refuses to run without a terminal and without `--yes`.
 - Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
@@ -66,7 +66,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `505 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `507 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -315,7 +315,7 @@ A piped core collector (for example `apport` or `systemd-coredump`) can ignore `
 
 **Impact:** this changes crash diagnostics for every application on the host. It's a temporary opt-in, and it creates no sysctl drop-in, service mask or SELinux change. Mayfly changes it only when you ask, with `core-policy apply` or the `--core-policy` flag. Keep it active for the whole life of the VMs, and restore it only after they're gone.
 
-**Automated form.** `bash mayfly.sh core-policy apply|restore|status` does what the two blocks below do. `apply` does nothing if the host already meets the requirement (a non-piped pattern and `fs.suid_dumpable=0`). Otherwise it saves the original values once per boot to `<state>/core-policy/<boot_id>/original.conf` (directories `0700`, file `0600`, created with `noclobber`), then runs `sudo sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0`. Without `sudo` it stops with an error and changes nothing. `restore` reads the saved file once, validates it, and passes only those validated values to `sudo sysctl -w`, never the file itself. Run as a normal user, it accepts a piped saved pattern only when the first token is an absolute path to a root-owned executable, reached through root-owned directories that are not group or world writable and with no symlinks, and it accepts a plain pattern only from a conservative character set. Anything else is refused with a message, because the snapshot lives in your own state directory and other programs that run as you could edit it. `restore` also refuses while any QEMU process exists or the check fails. In that case restore the original values by hand with `sysctl -w`, or in mode 1 run `sudo mayfly core-policy restore`, which reads the root-owned snapshot. `status` only reads. With `--core-policy` on `launch`, `check-profile` or `setup`, Mayfly remembers whether it applied the policy and restores it on exit (including Ctrl+C, `SIGTERM` and `SIGHUP`) only if it did and no QEMU process is left. Otherwise it leaves the policy in place and tells you to run `core-policy restore` after the last session. A `SIGKILL` or a power loss skips the restore, so run `core-policy status` afterwards. In mode 1 the root wrapper does the same without `sudo`, with the snapshot under `/var/lib/mayfly/core-policy`, and `sudo mayfly core-policy ...` is available.
+**Automated form.** `bash mayfly.sh core-policy apply|restore|status` does what the two blocks below do. `apply` does nothing if the host already meets the requirement (a non-piped pattern and `fs.suid_dumpable=0`). Otherwise it saves the original values once per boot to `<state>/core-policy/<boot_id>/original.conf` (directories `0700`, file `0600`, created with `noclobber`), then runs `sudo sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0`. Without `sudo` it stops with an error and changes nothing. `restore` reads the saved file once, validates it, and passes only those validated values to `sudo sysctl -w`, never the file itself. Run as a normal user, it accepts a piped saved pattern only when the helper is a known crash collector (`systemd-coredump`, `apport` or `abrt-hook-ccpp`) at an absolute path that is a root-owned executable, reached through root-owned directories that are not group or world writable and with no symlinks, and when every argument is only a core specifier such as `%P`, a short option glued to one such as `-p%p`, or a bare `--`. Interpreters such as `env`, `bash` or `python3`, paths in arguments, and odd whitespace are refused. A plain pattern is accepted only from a conservative character set. Anything else is refused with a message, because the snapshot lives in your own state directory and other programs that run as you could edit it. You can always restore the original values by hand with `sysctl -w`, or in mode 1 run `sudo mayfly core-policy restore`, which reads the root-owned snapshot. `restore` also refuses while any QEMU process exists or the check fails. `status` only reads. With `--core-policy` on `launch`, `check-profile` or `setup`, Mayfly remembers whether it applied the policy and restores it on exit (including Ctrl+C, `SIGTERM` and `SIGHUP`) only if it did and no QEMU process is left. Otherwise it leaves the policy in place and tells you to run `core-policy restore` after the last session. A `SIGKILL` or a power loss skips the restore, so run `core-policy status` afterwards. In mode 1 the root wrapper does the same without `sudo`, with the snapshot under `/var/lib/mayfly/core-policy`, and `sudo mayfly core-policy ...` is available.
 
 Check the current values:
 
@@ -370,7 +370,7 @@ Expected: `kernel.core_pattern = /dev/null` and `fs.suid_dumpable = 0`. If only 
   pgrep -f '[q]emu-system-' || status=$?
   [[ $status == 1 ]] || { echo 'QEMU remains or inspection failed: do not restore.' >&2; exit 1; }
   printf 'Saved values: kernel.core_pattern=%s fs.suid_dumpable=%s\n' "$pattern" "$suid"
-  read -r -p 'Are these your original values (a pipe must name a root-owned handler), all VMs gone and no launch in progress? Type RESTORE: ' answer
+  read -r -p 'Are these your original values (a piped value must name a known crash collector such as systemd-coredump or apport, owned by root), all VMs gone and no launch in progress? Type RESTORE: ' answer
   [[ $answer == RESTORE ]]
   sudo sysctl -w "kernel.core_pattern=$pattern" "fs.suid_dumpable=$suid"
   sysctl kernel.core_pattern fs.suid_dumpable
@@ -383,7 +383,7 @@ If the restore refuses because of an unrelated QEMU process, don't stop the othe
 
 ## 10. Run as a dedicated user (mode 1)
 
-Mode 1 moves the VMs to a no-login system user named `mayfly`, so other programs that run as you can't reach them through file permissions. You still start and watch the session from your desktop. It's the strongest mode and it needs a native Wayland session. Mayfly's installer, [`host/install-host.sh`](host/install-host.sh), installs a root-owned wrapper at `/usr/local/sbin/mayfly`. The wrapper runs the project as `mayfly` with a cleared environment.
+Mode 1 moves the VMs to a no-login system user named `mayfly`, so other programs running under your account cannot reach them through file permissions. You still start and watch the session from your desktop. It's the strongest mode and it needs a native Wayland session. Mayfly's installer, [`host/install-host.sh`](host/install-host.sh), installs a root-owned wrapper at `/usr/local/sbin/mayfly`. The wrapper runs the project as `mayfly` with a cleared environment.
 
 This is the one step that uses `sudo`, by design. The installer and the wrapper run as root, so read them before you run them.
 

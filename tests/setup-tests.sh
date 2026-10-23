@@ -267,10 +267,10 @@ mf_st_core='
     printf "%s\n" "$BOOT" > "$MF_PROC_SYS/kernel/random/boot_id"
     setcore() { printf "%s\n" "$1" > "$MF_PROC_SYS/kernel/core_pattern"; printf "%s\n" "$2" > "$MF_PROC_SYS/fs/suid_dumpable"; }
     getcore() { printf "%s|%s\n" "$(< "$MF_PROC_SYS/kernel/core_pattern")" "$(< "$MF_PROC_SYS/fs/suid_dumpable")"; }
-    rd=$(realpath -e "$d")/root; mkdir -p "$rd"; printf "#!/bin/sh\n" > "$rd/handler"; chmod 755 "$rd/handler"
+    rd=$(realpath -e "$d")/root; mkdir -p "$rd"; printf "#!/bin/sh\n" > "$rd/systemd-coredump"; chmod 755 "$rd/systemd-coredump"; cp "$rd/systemd-coredump" "$rd/apport"; mkdir -p "$rd/np" "$rd/ln"
     declare -A FAKE=()
     mf_core_stat_info() { if [[ -n ${FAKE[$1]:-} ]]; then printf "%s\n" "${FAKE[$1]}"; else printf "0 755\n"; fi; }
-    PIPE="|$rd/handler %P %u %g"
+    PIPE="|$rd/systemd-coredump %P %u %g"
     setcore "$PIPE" 2
     snap=$MAYFLY_HOME/core-policy/$BOOT/original.conf
     sysctl() {
@@ -343,29 +343,48 @@ kernel.core_pattern=core"; neg mf_core_restore >/dev/null 2>&1
 check 'core-policy: snapshot text is data, and a hostile pipe or odd pattern never reaches sudo or sysctl' \
     mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
         snap=$(mf_core_snapshot_path); chmod 600 "$d/state/core-policy/$BOOT/original.conf" 2>/dev/null || :
-        ln -s "$rd/handler" "$rd/link"; cp "$rd/handler" "$rd/plain"; chmod 644 "$rd/plain"
+        ln -s "$rd/systemd-coredump" "$rd/ln/apport"; cp "$rd/systemd-coredump" "$rd/np/apport"; chmod 644 "$rd/np/apport"
         hostile() { # label, pattern, [fake path, fake stat]
             rm -f "$d/sysctl.log" "$d/sudo.log"; FAKE=(); [[ -z ${3:-} ]] || FAKE[$3]=$4
             printf "kernel.core_pattern=%s\nfs.suid_dumpable=1\n" "$2" > "$snap"; chmod 600 "$snap"
             neg mf_core_restore >/dev/null 2>&1
             [[ ! -e $d/sysctl.log && ! -e $d/sudo.log && ! -e $d/PWNED && $(getcore) == "$PIPE|2" ]] || { echo "leaked: $1" >&2; exit 1; }
         }
-        hostile user-owned-helper "|$rd/handler %P" "$rd/handler" "$UID 755"
-        hostile writable-helper "|$rd/handler %P" "$rd/handler" "0 775"
-        hostile world-writable-helper "|$rd/handler %P" "$rd/handler" "0 757"
-        hostile user-owned-ancestor "|$rd/handler %P" "$rd" "$UID 755"
-        hostile writable-ancestor "|$rd/handler %P" "$rd" "0 777"
-        hostile writable-upper-ancestor "|$rd/handler %P" "$(dirname "$rd")" "0 775"
+        hostile user-owned-helper "|$rd/systemd-coredump %P" "$rd/systemd-coredump" "$UID 755"
+        hostile writable-helper "|$rd/systemd-coredump %P" "$rd/systemd-coredump" "0 775"
+        hostile world-writable-helper "|$rd/systemd-coredump %P" "$rd/systemd-coredump" "0 757"
+        hostile user-owned-ancestor "|$rd/systemd-coredump %P" "$rd" "$UID 755"
+        hostile writable-ancestor "|$rd/systemd-coredump %P" "$rd" "0 777"
+        hostile writable-upper-ancestor "|$rd/systemd-coredump %P" "$(dirname "$rd")" "0 775"
         hostile relative "|handler %P"; hostile dot-relative "|./handler %P"; hostile traversal "|$rd/../root/handler %P"
-        hostile symlink "|$rd/link %P"; hostile missing "|$rd/none %P"; hostile not-executable "|$rd/plain %P"
-        hostile metachar "|$rd/handler %P;id"; hostile subshell "|$rd/handler \$(touch $d/PWNED)"
+        hostile symlink "|$rd/ln/apport %P"; hostile missing "|$rd/np/systemd-coredump %P"; hostile not-executable "|$rd/np/apport %P"
+        hostile env-script "|/usr/bin/env /home/u/evil.sh"; hostile bash-script "|/usr/bin/bash /home/u/x"; hostile env-S "|/usr/bin/env -S x"
+        hostile python-c "|/usr/bin/python3 -c%c"; hostile perl "|/usr/bin/perl %P"; hostile sh "|/bin/sh -c%c"
+        hostile renamed-interpreter "|$rd/systemd-coredump2 %P"; hostile prefix-name "|$rd/not-apport %P"; hostile suffix-name "|$rd/apport.sh %P"
+        hostile coredump-path-arg "|$rd/systemd-coredump /home/u/x"; hostile coredump-dash-S "|$rd/systemd-coredump -S"
+        hostile coredump-long-opt "|$rd/systemd-coredump --exec=%P"; hostile coredump-glued-path "|$rd/systemd-coredump -p/home/u/x"
+        hostile coredump-pp "|$rd/systemd-coredump -pp"; hostile coredump-ps "|$rd/systemd-coredump -ps"; hostile coredump-bare-opt "|$rd/systemd-coredump -p"; hostile coredump-two-letter "|$rd/systemd-coredump -pp%p"; hostile coredump-bare-word "|$rd/systemd-coredump P"
+        hostile coredump-digit "|$rd/systemd-coredump -p5"; hostile coredump-eq "|$rd/systemd-coredump x=%P"; hostile coredump-pct-pair "|$rd/systemd-coredump %PP"
+        hostile double-space "|$rd/systemd-coredump  %P"; hostile trailing-space "|$rd/systemd-coredump %P "; hostile leading-space "| $rd/systemd-coredump %P"
+        hostile tab "|$rd/systemd-coredump	%P"; hostile tab-arg "|$rd/systemd-coredump %P	/home/u/x"; hostile newline-arg "|$rd/systemd-coredump %P
+/home/u/x"
+        hostile metachar "|$rd/systemd-coredump %P;id"; hostile subshell "|$rd/systemd-coredump \$(touch $d/PWNED)"
         hostile empty-pipe "|"; hostile space-pipe "| "
         hostile cmd-subst "\$(touch $d/PWNED)"; hostile plain-space "core file"; hostile plain-semicolon "core;id"; hostile plain-backtick "core\`id\`"
         printf "kernel.core_pattern=core\nfs.suid_dumpable=1\nkernel.core_pattern=|/home/u/evil\n" > "$snap"; neg mf_core_restore >/dev/null 2>&1; [[ ! -e $d/sysctl.log ]]'
-check 'core-policy: a root-owned handler behind root-owned directories and plain patterns are accepted' \
+check 'core-policy: the reviewer repro (env with a user script) is refused and the allow-list is a fixed readonly array' \
+    mf_st "$mf_st_core"'neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil"; neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil.sh"
+        mf_core_pattern_safe "|$rd/apport -p%p -- %E"; [[ $(declare -p MF_CORE_COLLECTORS) == "declare -ar"* ]]
+        [[ ${MF_CORE_COLLECTORS[*]} == "systemd-coredump apport abrt-hook-ccpp" ]]'
+check 'wrapper: loading the core-policy helpers drops inherited overrides and fixes the state path' \
+    mf_sub 'MF_PROG='"$project"'; MF_STATE=/var/lib/mayfly; export MF_PROC_SYS=/tmp/evil-proc MF_CORE_STATE=/tmp/evil-state
+        mf_load_core_policy
+        [[ -z ${MF_PROC_SYS+x} && $MF_CORE_STATE == /var/lib/mayfly ]]
+        [[ $(mf_core_value kernel/core_pattern) == "$(< /proc/sys/kernel/core_pattern)" ]]'
+check 'core-policy: known collectors behind root-owned directories with specifier-only arguments, and plain patterns, are accepted' \
     mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
         snap=$(mf_core_snapshot_path)
-        for p in "|$rd/handler %P %u %g" "| $rd/handler -p%p --x=1,2" "core" "/var/crash/core.%p" "core.%e.%p:%t"; do
+        for p in "|$rd/systemd-coredump %P %u %g" "|$rd/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -- %E" "|$rd/systemd-coredump %P %u %g %s %t %c %h" "|$rd/systemd-coredump" "core" "/var/crash/core.%p" "core.%e.%p:%t"; do
             setcore "$PIPE" 2; rm -f "$d/sysctl.log"; printf "kernel.core_pattern=%s\nfs.suid_dumpable=0\n" "$p" > "$snap"; chmod 600 "$snap"
             mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "$p|0" ]]; grep -qF "sysctl -w kernel.core_pattern=$p fs.suid_dumpable=0" "$d/sysctl.log"
         done'

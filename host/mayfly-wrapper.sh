@@ -136,6 +136,8 @@ mf_newest_base() {
 # The core-policy helpers live in the verified install tree. Load them only
 # after mf_check_install, and keep the snapshot under root-owned state.
 mf_load_core_policy() {
+    # Fixed values only: nothing inherited from the caller's environment.
+    unset MF_PROC_SYS MF_CORE_STATE
     source "$MF_PROG/lib/policy.sh"
     source "$MF_PROG/lib/host.sh"
     source "$MF_PROG/lib/corepolicy.sh"

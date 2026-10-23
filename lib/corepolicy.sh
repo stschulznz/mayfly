@@ -111,16 +111,35 @@ mf_core_path_trusted() {
 }
 
 # Non-root restores hand the value to sudo, so a user-writable snapshot must
-# never be able to name a helper the kernel would run as root. Pipe handlers
-# are accepted only when they are a root-owned executable behind root-owned,
-# non-writable directories. Plain patterns use a conservative character set.
+# never be able to make the kernel run something of the user's as root. A pipe
+# pattern is accepted only for a known crash collector, found at a root-owned
+# executable behind root-owned, non-writable directories, whose arguments are
+# only core specifiers (%P), short options glued to a specifier (-p%p) and a
+# bare "--". Interpreters such as env, bash or python3 are never collectors.
+# Plain patterns use a conservative character set.
+[[ -v MF_CORE_COLLECTORS ]] || readonly -a MF_CORE_COLLECTORS=(systemd-coredump apport abrt-hook-ccpp)
+
+mf_core_collector_known() {
+    local name
+    for name in "${MF_CORE_COLLECTORS[@]}"; do
+        [[ $1 == "$name" ]] && return 0
+    done
+    return 1
+}
+
 mf_core_pattern_safe() {
-    local pattern=$1 rest helper
+    local pattern=$1 rest helper token
+    local -a tokens
     if [[ $pattern == \|* ]]; then
         rest=${pattern#|}
-        rest=${rest#"${rest%%[! ]*}"}
-        helper=${rest%% *}
-        [[ $helper =~ ^/[A-Za-z0-9_./+-]+$ && $rest =~ ^[A-Za-z0-9_./%+:@=,\ -]+$ ]] || return 1
+        [[ $rest =~ ^[^\ ]+(\ [^\ ]+)*$ && $rest =~ ^[A-Za-z0-9_./%+:@=,\ -]+$ ]] || return 1
+        read -r -a tokens <<< "$rest"
+        helper=${tokens[0]}
+        [[ $helper =~ ^/[A-Za-z0-9_./+-]+$ ]] || return 1
+        mf_core_collector_known "${helper##*/}" || return 1
+        for token in "${tokens[@]:1}"; do
+            [[ $token =~ ^(%[A-Za-z%]|-[A-Za-z]%[A-Za-z]|--)$ ]] || return 1
+        done
         [[ $(realpath -e -- "$helper" 2>/dev/null) == "$helper" && -f $helper && -x $helper ]] || return 1
         mf_core_path_trusted "$helper"
     else

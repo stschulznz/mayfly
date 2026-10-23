@@ -199,18 +199,25 @@ bash mayfly.sh setup --core-policy
 bash mayfly.sh launch --core-policy
 ```
 
-1. `preflight` changes nothing. It prints the package install command for your system. Run that command, then run `preflight` again until it says `Ready for the next step`.
-2. Place your WireGuard profile at the default path, mode `0600`, in the [restricted format](#wireguard-profile-format). If you skip this, `setup` creates the directories, tells you where the file goes and stops. Run it again after you place the file.
+1. `preflight` changes nothing. It prints the package install command for your system. Run that command, then run `preflight` again until it says `Ready for the next step`. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1 of DEPLOYMENT.md](DEPLOYMENT.md#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
+2. Place your WireGuard profile at the default path, mode `0600`, in the [restricted format](#wireguard-profile-format). Provider-generated files often fail the restricted parser (IPv4 `/32` address only, a numeric IPv4 endpoint, one numeric DNS server), so edit yours to match first. `setup` rejects anything else at its profile check, step 4 of 6, before any download, and names the field, not the value. If you skip this step, `setup` creates the directories, tells you where the file goes and stops. Run it again after you place the file.
 3. `setup` checks the profile, downloads and verifies Debian and Tor Browser (it shows exact versions and URLs and asks `Continue? [y/N]`), then builds the base. Each step is skipped when it's already done, so it's safe to run again.
 4. `launch` starts the newest base. Pick an entry in the chooser and keep the terminal open. Close the browser to end the session. The VMs stop and the session's RAM files are removed.
 
-`--core-policy` is only needed when your host pipes core dumps to a collector such as `apport` or `systemd-coredump`. When the host already satisfies the requirement, it changes nothing. Otherwise it runs `sudo sysctl` to set `kernel.core_pattern=/dev/null` and `fs.suid_dumpable=0` for the whole host, and undoes that on exit only if it applied the change and no QEMU process is running. Before you launch, close other work and don't hibernate. See [Core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy).
+`--core-policy` is only needed when your host pipes core dumps to a collector such as `apport` or `systemd-coredump`, or has `fs.suid_dumpable` other than `0`. When the host already satisfies the requirement, it changes nothing. Otherwise it runs `sudo sysctl` to set `kernel.core_pattern=/dev/null` and `fs.suid_dumpable=0` for the whole host, and undoes that on exit only if it applied the change and no QEMU process is running. Before you launch, close other work and don't hibernate. See [Core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy).
 
-Run mode 1 (dedicated user) takes three commands after the packages: `sudo bash host/install-host.sh`, `sudo mayfly setup`, `sudo mayfly launch --core-policy`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
+Run mode 1 (dedicated user) has more steps than mode 2, in this order:
+
+1. Run `bash mayfly.sh preflight` and install the packages it prints, as above.
+2. Place your WireGuard profile at `~/.local/state/mayfly/secrets/wireguard.conf` with mode `0600`, as in step 2 above, before you run the installer. The installer imports it for the `mayfly` user, and `sudo mayfly setup` stops with "the WireGuard profile is missing" without it.
+3. Read `host/install-host.sh`, then run `sudo bash host/install-host.sh`.
+4. Run `sudo mayfly setup`, then `sudo mayfly launch --core-policy`.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 
 ## Advanced
 
-`setup` runs these commands in order. You can run each one yourself:
+`setup` runs these commands in order. Run each one yourself if you want to:
 
 ```bash
 bash mayfly.sh check-profile [--core-policy] [ABSOLUTE-PROFILE-FILE]
@@ -221,7 +228,7 @@ bash mayfly.sh launch [--core-policy] [NAME]
 bash mayfly.sh core-policy apply|restore|status
 ```
 
-- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
+- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. Versions are chosen automatically from upstream, so compare them with the official Debian and Tor Browser pages if you need to guard against a downgrade. `--yes` skips this review. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
 - `build` names the base `base-YYYYMMDD` unless you give a name, and never overwrites an existing base.
 - The absolute-path forms still work and are what the dedicated-user wrapper uses: `build ABS-PINS ABS-NEW-BASE` and `launch ABS-BASE ABS-PROFILE [RAM-PARENT]`.
 - [DEPLOYMENT.md](DEPLOYMENT.md#manual-and-advanced-steps) has the manual steps, host diagnostics, the leak test and troubleshooting.
@@ -230,7 +237,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (505 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (507 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
