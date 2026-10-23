@@ -34,7 +34,7 @@ Mayfly is for visiting sites without leaving a record of the visit on your compu
 
 What you get when the session ends and you shut the machine down or lock it as you normally would:
 
-- **No browsing record on your computer.** By design, history, cookies, caches, bookmarks and downloads are written to a RAM-backed overlay and discarded. Live proof of that is still unverified. Nothing in your normal browser or home directory ever saw the visit.
+- **No browsing record on your computer.** By design, history, cookies, caches, bookmarks and downloads are written to a RAM-backed overlay and discarded. One live check supports this (see [Tested](#tested)). Nothing in your normal browser or home directory ever saw the visit.
 - **No record of the visit in your desktop's normal network setup.** Your desktop's own connection doesn't carry the traffic to the sites; only the encrypted tunnel to your VPN does. Your router and internet provider can still see that tunnel.
 
 What this doesn't mean, and why the claim "no trace" is not safe to make:
@@ -234,6 +234,7 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
+| RAM-only writes, one Firefox session (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
 | Leak test, all three entries (run mode 1) | One session per entry on that host, with per-user packet counters. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
 | Tunnel-down test, one session (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). Only one short session was observed. |
 | Other distributions | **Not live-tested.** |
@@ -246,7 +247,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 - Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); repeated runs, tunnel loss in the middle of a session, and the other failure paths remain unverified.
 - Restart paths, tunnel loss in the middle of a session, and a gateway or router crash. The startup case with an unreachable endpoint was observed once.
-- Live proof that session writes stay in RAM.
+- Repeated and longer RAM-only write checks. One session was observed (see above).
 - Update suppression in either browser, especially Tor Browser.
 - Firefox's active policies (`about:policies`) and content sandbox.
 - An SELinux denial survey.
