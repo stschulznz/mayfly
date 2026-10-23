@@ -237,7 +237,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (509 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (511 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |

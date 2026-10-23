@@ -717,3 +717,31 @@ check 'installer: an explicit --profile wins over the default' \
         out=$(mf_install_main --dry-run --allow-dirty --profile "$d/mine.conf" 2>&1)
         [[ $out == *"+ copy $d/mine.conf -> "* && $out != *"+ copy $prof"* ]]'
 
+# ---- DEPLOYMENT.md manual restore block, executed as written ---------------
+MF_DOCS_BLOCK=$(awk '/^\*\*Restore\*\*/ {f = 1} f && /^```bash/ {g = 1; next} g && /^```/ {exit} g {print}' "$project/DEPLOYMENT.md")
+export MF_DOCS_BLOCK
+mf_st_docs='
+    [[ -n $MF_DOCS_BLOCK ]]
+    export MF_STATE=$d/mstate; boot=$(cat /proc/sys/kernel/random/boot_id)
+    mkdir -p -m 700 "$MF_STATE/core-policy/$boot"; snapf=$MF_STATE/core-policy/$boot/original.conf
+    sudo() { printf "sudo %s\n" "$1" >> "$d/sudo.log"; "$@"; }
+    sysctl() { printf "sysctl %s\n" "$*" >> "$d/sysctl.log"; }
+    pgrep() { return "${STUB_PGREP_RC:-1}"; }
+    blk() { # pattern suid [answer]
+        printf "kernel.core_pattern=%s\nfs.suid_dumpable=%s\n" "$1" "$2" > "$snapf"; chmod 600 "$snapf"; rm -f "$d/sudo.log" "$d/sysctl.log"
+        set +e; ( eval "$MF_DOCS_BLOCK" ) <<< "${3-RESTORE}" > "$d/out" 2>&1; rc=$?; set -e
+    }
+    refused() { blk "$@"; [[ $rc != 0 && ! -e $d/sudo.log && ! -e $d/sysctl.log ]] || { echo "applied: $1 $2" >&2; exit 1; }; neg grep -q "$(printf "\033")" "$d/out"; }
+'
+check 'docs: the manual restore block never applies a pipe, control characters or a bad pairing' \
+    mf_st "$mf_st_docs"'refused "|/usr/lib/systemd/systemd-coredump %P %u %g" 0; refused "|/usr/lib/systemd/systemd-coredump %P" 2
+        refused "|/usr/bin/env /home/u/evil.sh" 0; refused "$(printf "|/x\033[2J\033[1;1Hcore")" 0; refused "$(printf "core\rx")" 0
+        refused "$(printf "core\tx")" 0; refused "$(printf "co\033re")" 0; refused "$(printf "|/x\r")" 2
+        refused /etc/cron.d/zz 0; refused /var/crash/core.%p 0; refused core 2; refused core 1; refused /dev/null 2
+        refused ../core 0; refused .hidden 0; refused a/b 0; refused "core file" 0; refused core 0 NO; refused core 0 ""
+        STUB_PGREP_RC=0; refused core 0'
+check 'docs: the manual restore block applies a plain relative name or /dev/null with suid 0, through sysctl -w from variables' \
+    mf_st "$mf_st_docs"'blk core 0; [[ $rc == 0 ]]; grep -qF "sysctl -w kernel.core_pattern=core fs.suid_dumpable=0" "$d/sysctl.log"
+        blk /dev/null 0; [[ $rc == 0 ]]; grep -qF "sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0" "$d/sysctl.log"
+        neg grep -q "sysctl -p" "$d/sysctl.log"'
+
