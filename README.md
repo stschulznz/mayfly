@@ -230,7 +230,7 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (376 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (382 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
@@ -242,7 +242,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 **Still unverified:**
 
-- Packet-capture proof that there's no DNS, IPv6 or direct fallback.
+- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [capture test](DEPLOYMENT.md#12-capture-test-check-that-nothing-leaves-outside-the-tunnel) and analyzer exist; no results are recorded yet.
 - Startup, restart and tunnel-loss failure paths.
 - Live proof that session writes stay in RAM.
 - Update suppression in either browser, especially Tor Browser.

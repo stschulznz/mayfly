@@ -275,5 +275,6 @@ source "$project/tests/regression-tests.sh"
 source "$project/tests/host-tests.sh"
 source "$project/tests/i2p-tests.sh"
 source "$project/tests/preflight-tests.sh"
+source "$project/tests/capture-tests.sh"
 printf '\n%s passed, %s failed. OFFLINE component checks, not live VM acceptance.\n' "$passed" "$failed"
 (( failed == 0 ))

@@ -34,7 +34,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `376 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `382 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -184,7 +184,7 @@ Now run `doctor` against a private scratch directory on `/dev/shm`, not `/dev/sh
 )
 ```
 
-Expected: exit `0`. A refused host exits `78` and prints which condition failed. `doctor` checks prerequisites only. It installs nothing, changes no host policy, starts no VM and never tests live routing. See the [host checks](README.md#memory-and-host-checks). If it refuses, see [Troubleshooting](#12-troubleshooting) and don't bypass the guard.
+Expected: exit `0`. A refused host exits `78` and prints which condition failed. `doctor` checks prerequisites only. It installs nothing, changes no host policy, starts no VM and never tests live routing. See the [host checks](README.md#memory-and-host-checks). If it refuses, see [Troubleshooting](#13-troubleshooting) and don't bypass the guard.
 
 ## 6. Launch a session
 
@@ -446,7 +446,42 @@ Browsers can't update inside a session, and pinning isn't an update service. Reb
 
 Debian package versions inside the guest aren't pinned, so a rebuild can change them. An update that happens inside a disposable session doesn't carry over to the next session.
 
-## 12. Troubleshooting
+## 12. Capture test: check that nothing leaves outside the tunnel
+
+This test records what your host sends to the network during a session and lists anything that isn't WireGuard traffic. A pass means no direct traffic was observed in that capture. It doesn't prove that no leak path exists. Run it once per entry, because the three entries behave differently.
+
+You need `tcpdump` and the name of your uplink interface (`ip route show default`, the word after `dev`). Close other network applications first.
+
+1. Record an idle baseline for one minute, with no Mayfly session open. It shows what your host sends by itself:
+
+   ```bash
+   sudo timeout 60 tcpdump -i UPLINK -nn -w /tmp/baseline.pcap
+   ```
+
+2. Start a capture, then launch a session from another terminal and use one entry. Open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then stop the capture with Ctrl-C:
+
+   ```bash
+   sudo tcpdump -i UPLINK -nn -w /tmp/session-firefox.pcap
+   ```
+
+3. Compare the two captures. Reading a capture file needs no privileges. `--profile` reads only the `Endpoint` line of your profile:
+
+   ```bash
+   bash tests/capture/analyze.sh --profile /abs/path/secrets/wireguard.conf \
+     /tmp/baseline.pcap /tmp/session-firefox.pcap
+   ```
+
+   `PASS` means every outbound packet that the baseline doesn't explain went to the WireGuard endpoint over UDP. `FAIL` lists each unexpected destination, for example DNS to another resolver or any IPv6 traffic. `inconclusive` means the session never reached the endpoint, so it proves nothing.
+
+4. Test the tunnel-down path. Make a copy of your profile with a wrong port in the `Endpoint` line, and launch with the copy. Expect no page to load and traffic only to that endpoint. Never edit your real profile. Run the analyzer with `--endpoint IP:WRONGPORT` and expect `PASS` with no pages loaded.
+
+Keep the captures private. They contain your host's network activity. Delete them when you finish:
+
+```bash
+rm -f /tmp/baseline.pcap /tmp/session-*.pcap
+```
+
+## 13. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
