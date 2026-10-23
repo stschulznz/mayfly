@@ -1,6 +1,6 @@
 # Deploy Mayfly
 
-This guide takes you from a fresh host to a first browsing session. It covers run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
+This guide takes you from a fresh host to a first browsing session. It covers run mode 2 (same user, native host) in steps 1 to 9, then run mode 1 (dedicated service user) in step 10, which is the strongest mode. Steps 11 to 13 cover rebuilding bases, the leak test and troubleshooting. See the [README](README.md#run-modes) for what each mode protects and what it doesn't.
 
 Mayfly is experimental. Live testing covers one host (Bazzite), and the commands here haven't been run on other distributions. See [Tested](README.md#tested).
 
@@ -196,7 +196,7 @@ bash mayfly.sh launch "$MF_STATE/bases/base-01" "$MF_STATE/secrets/wireguard.con
 
 The gateway VM starts first, and the browser VM starts after the gateway's private socket appears. A socket is not a VPN handshake or a route check. A chooser window then lists the three entries. Pick one. Only one entry runs per session, so close the browser and launch again to switch.
 
-To check which route an entry uses, open `https://check.torproject.org/api/ip` in the VM. Firefox should report your VPN's egress address and `IsTor: false`. Tor Browser should report `IsTor: true`. An address difference alone doesn't prove the VPN path, and these checks don't prove that DNS, IPv6 or fallback traffic is absent. That proof needs a packet capture, which Mayfly doesn't provide. The test exposes your egress to that site, so use no accounts.
+To check which route an entry uses, open `https://check.torproject.org/api/ip` in the VM. Firefox should report your VPN's egress address and `IsTor: false`. Tor Browser should report `IsTor: true`. An address difference alone doesn't prove the VPN path, and these checks don't prove that DNS, IPv6 or fallback traffic is absent. That proof needs a leak test. See [step 12](#12-leak-test-check-that-nothing-leaves-outside-the-tunnel). The test exposes your egress to that site, so use no accounts.
 
 The I2P entry shows a progress window while the router joins the network, which usually takes a few minutes. Type `http://` before `.i2p` names. If joining never finishes, suspect the guest clock first. See the [I2P limits](README.md#the-i2p-entry).
 
@@ -337,7 +337,7 @@ Expected: `kernel.core_pattern = /dev/null` and `fs.suid_dumpable = 0`. If only 
 
 Expected: the original pattern and number return, including a piped pattern if that was your baseline. Keep the saved file. Don't run `sudo sysctl --system`. The [sysctl reference](https://man7.org/linux/man-pages/man8/sysctl.8.html) defines the explicit-file form. A reboot ends the old boot's policy and normally brings back your distribution's defaults. After a reboot, save a new baseline for that boot. Never replay an old boot's file.
 
-If the restore refuses because of an unrelated QEMU process, don't stop the other workload to satisfy it. Keep the restricted policy until you can account for every process.
+If the restore refuses because of an unrelated QEMU process, don't stop the other workload to satisfy it. Keep the restricted policy until you have accounted for every process.
 
 ## 10. Run as a dedicated user (mode 1)
 
@@ -461,7 +461,7 @@ sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo counter comment
 sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo ip daddr ENDPOINT_IP udp dport PORT counter comment '"endpoint"'
 ```
 
-Launch a session, use one entry, and open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then read the counters:
+Launch a session, use one entry, and open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then read the counters. Don't run `sudo mayfly build` while the rules exist, because the build downloads as that user and adds to the counts:
 
 ```bash
 sudo nft list table inet mfcap
@@ -498,7 +498,7 @@ You need `tcpdump` and the name of your uplink interface (`ip route show default
      /tmp/baseline.pcap /tmp/session-firefox.pcap
    ```
 
-   `PASS` means every outbound packet that the baseline doesn't explain went to the WireGuard endpoint over UDP. `FAIL` lists each unexpected destination. Most of those are usually your own programs, such as browsers, NTP and mDNS. Use Method 1 to tell the difference. `inconclusive` means the session never reached the endpoint.
+   `PASS` means every outbound packet that the baseline doesn't explain went to the WireGuard endpoint over UDP. `FAIL` lists each unexpected destination. Most of those are usually your own programs, such as browsers, NTP and mDNS. Use Method 1 to tell the difference. A `FAIL` with `the capture is inconclusive` means the session never reached the endpoint.
 
 Keep the captures private, because they contain your host's network activity, and delete them when you finish:
 

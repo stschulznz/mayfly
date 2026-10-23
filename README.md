@@ -1,8 +1,8 @@
 # Mayfly
 
-Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: packet-level leak proof is still missing (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
+Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: only a one-session-per-entry packet-counter check has been run (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
 
-**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. It is a privacy tool, not a guarantee of anonymity, and its leak tests are still missing, so don't stake your safety on it yet.
+**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. It is a privacy tool, not a guarantee of anonymity, and its leak testing is limited to one session per entry on one host (see [Tested](#tested)), so don't stake your safety on it yet.
 
 Licence: [MIT](LICENSE).
 
@@ -30,12 +30,12 @@ Mayfly is for visiting sites without leaving a record of the visit on your compu
 |---|---|---|---|
 | Firefox over WireGuard | The VPN's address, not yours | An encrypted connection to the VPN | Which sites you visit, and when |
 | Tor Browser over WireGuard | A Tor exit relay's address | An encrypted connection to the VPN | That you use Tor, not which sites |
-| I2P over WireGuard (eepsites only) | Nothing about you. Eepsites are reached through I2P tunnels | An encrypted connection to the VPN | That the traffic looks like I2P, not which eepsites |
+| I2P over WireGuard (eepsites only) | Not your IP address. Eepsites are reached through I2P tunnels | An encrypted connection to the VPN | That the traffic looks like I2P, not which eepsites |
 
 What you get when the session ends and you shut the machine down or lock it as you normally would:
 
-- **No browsing record on your computer.** History, cookies, caches, bookmarks and downloads lived in RAM and are gone. Nothing in your normal browser or home directory ever saw the visit.
-- **No record of the visit in your desktop's normal network setup.** Your desktop's own connection doesn't carry the traffic to the sites; only the encrypted tunnel to your VPN does.
+- **No browsing record on your computer.** By design, history, cookies, caches, bookmarks and downloads are written to a RAM-backed overlay and discarded. Live proof of that is still unverified. Nothing in your normal browser or home directory ever saw the visit.
+- **No record of the visit in your desktop's normal network setup.** Your desktop's own connection doesn't carry the traffic to the sites; only the encrypted tunnel to your VPN does. Your router and internet provider can still see that tunnel.
 
 What this doesn't mean, and why the claim "no trace" is not safe to make:
 
@@ -67,7 +67,7 @@ Tor Browser -----+---- private UNIX socket ---- gateway VM
 - Each session gets fresh qcow2 overlays on a RAM-backed `tmpfs` over two read-only base images that you build once. The guests get 1 GiB and 4 GiB of RAM, and each overlay file has a hard 3 GiB growth ceiling.
 - The launcher configures no shared folder and no download export. Downloads, bookmarks and guest-side changes are lost with the session.
 
-These are implemented controls. Packet-level proof that nothing falls back to a direct path is still missing (see [Tested](#tested)).
+These are implemented controls. Only a one-session-per-entry packet-counter check that nothing falls back to a direct path has been run (see [Tested](#tested)).
 
 The exact QEMU arguments are in [`lib/runtime.sh`](lib/runtime.sh). The guest firewall is in [`lib/policy.sh`](lib/policy.sh) and [`guest/network.sh`](guest/network.sh).
 
