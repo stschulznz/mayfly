@@ -235,6 +235,7 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
 | Leak test, all three entries (run mode 1) | One session per entry on that host, with per-user packet counters. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
+| Tunnel-down test, one session (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). Only one short session was observed. |
 | Other distributions | **Not live-tested.** |
 
 The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
@@ -243,7 +244,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 **Still unverified:**
 
-- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); the tunnel-down path and repeated runs remain unverified.
+- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); repeated runs, tunnel loss in the middle of a session, and the other failure paths remain unverified.
 - Startup, restart and tunnel-loss failure paths.
 - Live proof that session writes stay in RAM.
 - Update suppression in either browser, especially Tor Browser.
