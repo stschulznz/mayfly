@@ -234,6 +234,7 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |
+| Leak test, Firefox over WireGuard entry (run mode 1) | One session on that host: all 4,704 packets the `mayfly` user sent off the machine went to the WireGuard endpoint. No DNS, IPv6 or other traffic from the VMs was counted. One session is not proof for every case. |
 | Other distributions | **Not live-tested.** |
 
 The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
@@ -242,7 +243,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 **Still unverified:**
 
-- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [capture test](DEPLOYMENT.md#12-capture-test-check-that-nothing-leaves-outside-the-tunnel) and analyzer exist; no results are recorded yet.
+- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run for the Firefox over WireGuard entry only (see the table above); Tor, I2P and the tunnel-down path remain unverified.
 - Startup, restart and tunnel-loss failure paths.
 - Live proof that session writes stay in RAM.
 - Update suppression in either browser, especially Tor Browser.

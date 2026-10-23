@@ -446,22 +446,49 @@ Browsers can't update inside a session, and pinning isn't an update service. Reb
 
 Debian package versions inside the guest aren't pinned, so a rebuild can change them. An update that happens inside a disposable session doesn't carry over to the next session.
 
-## 12. Capture test: check that nothing leaves outside the tunnel
+## 12. Leak test: check that nothing leaves outside the tunnel
 
-This test records what your host sends to the network during a session and lists anything that isn't WireGuard traffic. A pass means no direct traffic was observed in that capture. It doesn't prove that no leak path exists. Run it once per entry, because the three entries behave differently.
+A pass means no direct traffic was observed in that run. It doesn't prove that no leak path exists. Run the test once per entry, because the three entries behave differently. There are two methods. Use the first if you run mode 1, because it attributes packets to the VMs. Use the second as a cross-check, or if you can't use mode 1.
 
-You need `tcpdump` and the name of your uplink interface (`ip route show default`, the word after `dev`). Close other network applications first.
+### Method 1: count packets sent by the `mayfly` user (mode 1)
 
-1. Record an idle baseline for one minute, with no Mayfly session open. It shows what your host sends by itself:
+The VMs run as the `mayfly` user, so the kernel can count every packet that user sends. These rules only count. They never block or change traffic, and you delete them afterwards. Replace `ENDPOINT_IP` and `PORT` with the address and port from the `Endpoint` line of your profile:
+
+```bash
+sudo nft add table inet mfcap
+sudo nft add chain inet mfcap out '{ type filter hook output priority -150; policy accept; }'
+sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo counter comment '"all"'
+sudo nft add rule inet mfcap out meta skuid mayfly oifname != lo ip daddr ENDPOINT_IP udp dport PORT counter comment '"endpoint"'
+```
+
+Launch a session, use one entry, and open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then read the counters:
+
+```bash
+sudo nft list table inet mfcap
+```
+
+`all` counts every packet the `mayfly` user sent off the machine, over IPv4 or IPv6. `endpoint` counts those sent to the WireGuard endpoint. Pass means the two packet counts are equal. Any gap means a VM sent something outside the tunnel. Reset the counters between entries with `sudo nft reset counters table inet mfcap`, and delete the table when you finish:
+
+```bash
+sudo nft delete table inet mfcap
+```
+
+### Method 2: capture on the uplink and compare with a baseline
+
+A capture sees your whole host, so it can't tell the VMs from your other programs. Close other network applications first, and expect to see their traffic in the result.
+
+You need `tcpdump` and the name of your uplink interface (`ip route show default`, the word after `dev`). Use `-Z "$USER"` so the files belong to you.
+
+1. Record an idle baseline for one minute, with no Mayfly session open:
 
    ```bash
-   sudo timeout 60 tcpdump -i UPLINK -nn -w /tmp/baseline.pcap
+   sudo timeout 60 tcpdump -Z "$USER" -i UPLINK -nn -w /tmp/baseline.pcap
    ```
 
-2. Start a capture, then launch a session from another terminal and use one entry. Open `check.torproject.org`, a DNS-leak test, an IPv6 test and a WebRTC test (for the I2P entry, open an `.i2p` site). Close the session, then stop the capture with Ctrl-C:
+2. Start a capture, launch a session from another terminal, run the same tests, close the session, then stop the capture with Ctrl-C:
 
    ```bash
-   sudo tcpdump -i UPLINK -nn -w /tmp/session-firefox.pcap
+   sudo tcpdump -Z "$USER" -i UPLINK -nn -w /tmp/session-firefox.pcap
    ```
 
 3. Compare the two captures. Reading a capture file needs no privileges. `--profile` reads only the `Endpoint` line of your profile:
@@ -471,15 +498,17 @@ You need `tcpdump` and the name of your uplink interface (`ip route show default
      /tmp/baseline.pcap /tmp/session-firefox.pcap
    ```
 
-   `PASS` means every outbound packet that the baseline doesn't explain went to the WireGuard endpoint over UDP. `FAIL` lists each unexpected destination, for example DNS to another resolver or any IPv6 traffic. `inconclusive` means the session never reached the endpoint, so it proves nothing.
+   `PASS` means every outbound packet that the baseline doesn't explain went to the WireGuard endpoint over UDP. `FAIL` lists each unexpected destination. Most of those are usually your own programs, such as browsers, NTP and mDNS. Use Method 1 to tell the difference. `inconclusive` means the session never reached the endpoint.
 
-4. Test the tunnel-down path. Make a copy of your profile with a wrong port in the `Endpoint` line, and launch with the copy. Expect no page to load and traffic only to that endpoint. Never edit your real profile. Run the analyzer with `--endpoint IP:WRONGPORT` and expect `PASS` with no pages loaded.
-
-Keep the captures private. They contain your host's network activity. Delete them when you finish:
+Keep the captures private, because they contain your host's network activity, and delete them when you finish:
 
 ```bash
 rm -f /tmp/baseline.pcap /tmp/session-*.pcap
 ```
+
+### Tunnel-down path
+
+Make a copy of your profile with a wrong port in the `Endpoint` line, and launch with the copy. Expect no page to load. With Method 1, set the rule's `PORT` to the wrong port and expect `all` to equal `endpoint`, which means the VM sent nothing except retries to that endpoint. Never edit your real profile.
 
 ## 13. Troubleshooting
 
