@@ -62,6 +62,7 @@ case $1 in
     launch)
         (( $# == 3 || $# == 4 )) || { usage; exit 64; }
         [[ $2 == /* && $3 == /* && ${4:-/dev/shm} == /* ]] || { usage; exit 64; }
+        printf '%s\n' 'Mayfly: until every session ends, do not hibernate, do not restore the core-dump policy, and close other work.' >&2
         mf_launch "$2" "$3" "${4:-/dev/shm}" "$root" ;;
     *) usage; exit 64 ;;
 esac

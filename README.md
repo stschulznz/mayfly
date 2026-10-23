@@ -194,7 +194,7 @@ bash mayfly.sh preflight
    bash mayfly.sh doctor "$scratch"; rmdir -- "$scratch"
    ```
 
-7. Launch. Keep the terminal open, and pick an entry in the chooser:
+7. Before you launch, close other work, don't hibernate, and keep the core-dump policy on until every session ends. Launch prints this reminder too. Keep the terminal open, and pick an entry in the chooser:
 
    ```bash
    bash mayfly.sh launch /abs/path/bases/base-01 /abs/path/secrets/wireguard.conf
@@ -206,7 +206,7 @@ Close the browser to end the session. The VMs stop and the session's RAM files a
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (372 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (376 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host. |
 | Current release (after the rename to Mayfly) | On that host, a fresh install, the `base-01` build, Firefox over WireGuard, Tor Browser and I2P worked. A bookmark made in one session was absent from the next, on this release too. The dedicated-user boundary checks were not repeated on this release. |

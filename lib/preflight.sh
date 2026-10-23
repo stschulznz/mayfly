@@ -189,6 +189,17 @@ mf_preflight() {
     else
         printf '  WARNING  less than 16 GiB of memory available; the launcher requires 16 GiB\n'
     fi
+    local swaps=${MF_PROC_SWAPS:-/proc/swaps} dev disk_swap=0
+    if [[ -r $swaps ]]; then
+        while read -r dev _; do
+            [[ $dev == Filename || $dev == /dev/zram* ]] || disk_swap=1
+        done < "$swaps"
+        if (( disk_swap )); then
+            printf '  WARNING  disk swap is active; session memory could be written to disk. The launcher refuses to start until it is off\n'
+        else
+            printf '  ok       no disk swap\n'
+        fi
+    fi
     if compgen -G '/boot/vmlinuz-*' >/dev/null 2>&1 || compgen -G '/usr/lib/modules/*/vmlinuz' >/dev/null 2>&1; then
         local readable=0 k
         for k in /boot/vmlinuz-* /usr/lib/modules/*/vmlinuz; do

@@ -88,3 +88,17 @@ check 'preflight asks for a GTK display package when QEMU lacks it' \
         [[ $out == *"MISSING  QEMU GTK display"* && $out == *"sudo pacman -S --needed qemu-ui-gtk"* ]]'
 check 'preflight never changes the system' \
     bash -c '! grep -nE "\b(sudo|rm|install|chmod|chown|mkdir|useradd|sysctl|rpm-ostree) " <(sed -n "/^mf_preflight() {/,/^}/p" "$1/lib/preflight.sh" | grep -v "printf") >/dev/null' _ "$project"
+
+mf_swap_case() { # swaps-file-content expected-substring
+    local f out
+    f=$(mktemp "${TMPDIR:-/tmp}/mfswap.XXXXXXXX"); printf '%b' "$1" > "$f"
+    out=$(MF_PROC_SWAPS=$f mf_pf 'f=$(mktemp); printf "ID=debian\n" > "$f"; mf_os_release_file=$f; mf_have() { return 0; }; mf_iso_tool() { echo xorriso; }
+        qemu-system-x86_64() { case "$*" in --version) echo "QEMU emulator version 10.0.0" ;; "-display help") echo gtk ;; "-netdev help") echo stream ;; esac; }
+        mf_preflight 2>&1; rm -f -- "$f"')
+    rm -f -- "$f"
+    [[ $out == *"$2"* ]]
+}
+check 'preflight warns about disk swap' mf_swap_case 'Filename Type Size Used Priority\n/swapfile file 1 0 -2\n' 'WARNING  disk swap is active'
+check 'preflight accepts zram-only swap' mf_swap_case 'Filename Type Size Used Priority\n/dev/zram0 partition 1 0 100\n' 'ok       no disk swap'
+check 'preflight accepts no swap' mf_swap_case 'Filename Type Size Used Priority\n' 'ok       no disk swap'
+check 'launch prints the do-not-hibernate reminder before starting' bash -c 'grep -B1 -A1 "do not hibernate" "$1/mayfly.sh" | grep -q mf_launch' _ "$project"
