@@ -325,7 +325,7 @@ check 'core-policy: restore without a snapshot changes nothing' \
     mf_st "$mf_st_core"'neg mf_core_restore >/dev/null 2>&1; [[ ! -e $d/sysctl.log && $(getcore) == "$PIPE|2" ]]'
 check 'core-policy: a tampered snapshot is refused (mode, symlink, hard link, shape, values)' \
     mf_st "$mf_st_core"'snap=$(mf_core_snapshot_path); good="kernel.core_pattern=core
-fs.suid_dumpable=1"
+fs.suid_dumpable=0"
         put() { rm -f "$snap" "$snap.x"; printf "%s\n" "$1" > "$snap"; chmod "${2:-600}" "$snap"; }
         put "$good" 644; neg mf_core_restore >/dev/null 2>&1
         put "$good"; ln "$snap" "$snap.x"; neg mf_core_restore >/dev/null 2>&1; rm -f "$snap.x"
@@ -339,14 +339,14 @@ fs.suid_dumpable=1"; neg mf_core_restore >/dev/null 2>&1
         put "fs.suid_dumpable=1
 kernel.core_pattern=core"; neg mf_core_restore >/dev/null 2>&1
         [[ ! -e $d/sysctl.log ]]
-        put "$good"; mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "core|1" ]]'
+        put "$good"; mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "core|0" ]]'
 check 'core-policy: snapshot text is data, and a hostile pipe or odd pattern never reaches sudo or sysctl' \
     mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
         snap=$(mf_core_snapshot_path); chmod 600 "$d/state/core-policy/$BOOT/original.conf" 2>/dev/null || :
         ln -s "$rd/systemd-coredump" "$rd/ln/apport"; cp "$rd/systemd-coredump" "$rd/np/apport"; chmod 644 "$rd/np/apport"
         hostile() { # label, pattern, [fake path, fake stat]
             rm -f "$d/sysctl.log" "$d/sudo.log"; FAKE=(); [[ -z ${3:-} ]] || FAKE[$3]=$4
-            printf "kernel.core_pattern=%s\nfs.suid_dumpable=1\n" "$2" > "$snap"; chmod 600 "$snap"
+            printf "kernel.core_pattern=%s\nfs.suid_dumpable=0\n" "$2" > "$snap"; chmod 600 "$snap"
             neg mf_core_restore >/dev/null 2>&1
             [[ ! -e $d/sysctl.log && ! -e $d/sudo.log && ! -e $d/PWNED && $(getcore) == "$PIPE|2" ]] || { echo "leaked: $1" >&2; exit 1; }
         }
@@ -373,9 +373,27 @@ check 'core-policy: snapshot text is data, and a hostile pipe or odd pattern nev
         hostile cmd-subst "\$(touch $d/PWNED)"; hostile plain-space "core file"; hostile plain-semicolon "core;id"; hostile plain-backtick "core\`id\`"
         printf "kernel.core_pattern=core\nfs.suid_dumpable=1\nkernel.core_pattern=|/home/u/evil\n" > "$snap"; neg mf_core_restore >/dev/null 2>&1; [[ ! -e $d/sysctl.log ]]'
 check 'core-policy: the reviewer repro (env with a user script) is refused and the allow-list is a fixed readonly array' \
-    mf_st "$mf_st_core"'neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil"; neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil.sh"
-        mf_core_pattern_safe "|$rd/apport -p%p -- %E"; [[ $(declare -p MF_CORE_COLLECTORS) == "declare -ar"* ]]
+    mf_st "$mf_st_core"'neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil" 0; neg mf_core_pattern_safe "|/usr/bin/env /home/u/evil.sh" 2
+        mf_core_pattern_safe "|$rd/apport -p%p -- %E" 0; [[ $(declare -p MF_CORE_COLLECTORS) == "declare -ar"* ]]
         [[ ${MF_CORE_COLLECTORS[*]} == "systemd-coredump apport abrt-hook-ccpp" ]]'
+check 'core-policy: an exported scalar MF_CORE_COLLECTORS cannot widen the allow-list' \
+    env MF_CORE_COLLECTORS=env bash -c 'source "$1/lib/policy.sh"; source "$1/lib/host.sh"; source "$1/lib/corepolicy.sh"; source "$1/lib/corepolicy.sh"
+        [[ ${MF_CORE_COLLECTORS[*]} == "systemd-coredump apport abrt-hook-ccpp" && $(declare -p MF_CORE_COLLECTORS) == "declare -ar"* ]] && ! mf_core_collector_known env' _ "$project"
+check 'core-policy: value pairs reaching sudo (suid_dumpable and pattern) follow the pairing rules' \
+    mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
+        snap=$(mf_core_snapshot_path)
+        pair() { # pattern suid; restore must be refused with sudo and sysctl never called
+            rm -f "$d/sysctl.log" "$d/sudo.log"; printf "kernel.core_pattern=%s\nfs.suid_dumpable=%s\n" "$1" "$2" > "$snap"; chmod 600 "$snap"
+            neg mf_core_restore >/dev/null 2>&1
+            [[ ! -e $d/sysctl.log && ! -e $d/sudo.log && $(getcore) == "$PIPE|2" ]] || { echo "leaked: $1 $2" >&2; exit 1; }
+        }
+        pair /etc/cron.d/zz 2; pair /etc/profile.d/x.sh 2; pair /var/crash/core.%p 2; pair core 2; pair core.%p 2; pair /dev/null 2
+        pair core 1; pair /dev/null 1; pair "|$rd/systemd-coredump %P" 1; pair /etc/cron.d/zz 0; pair /var/crash/core.%p 0; pair /dev/null/x 0
+        pair .hidden 0; pair ../core 0; pair a..b 0; pair a/b 0; pair -core 0; pair "core file" 0; pair core 7
+        ok() { setcore "$PIPE" 2; rm -f "$d/sysctl.log"; printf "kernel.core_pattern=%s\nfs.suid_dumpable=%s\n" "$1" "$2" > "$snap"; chmod 600 "$snap"
+            mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "$1|$2" ]] || { echo "refused: $1 $2" >&2; exit 1; }; }
+        ok core 0; ok /dev/null 0; ok "core.%e.%p:%t" 0; ok "|$rd/systemd-coredump %P %u %g" 0; ok "|$rd/systemd-coredump %P %u %g" 2
+        ok "|$rd/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -- %E" 2'
 check 'wrapper: loading the core-policy helpers drops inherited overrides and fixes the state path' \
     mf_sub 'MF_PROG='"$project"'; MF_STATE=/var/lib/mayfly; export MF_PROC_SYS=/tmp/evil-proc MF_CORE_STATE=/tmp/evil-state
         mf_load_core_policy
@@ -384,15 +402,15 @@ check 'wrapper: loading the core-policy helpers drops inherited overrides and fi
 check 'core-policy: known collectors behind root-owned directories with specifier-only arguments, and plain patterns, are accepted' \
     mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
         snap=$(mf_core_snapshot_path)
-        for p in "|$rd/systemd-coredump %P %u %g" "|$rd/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -- %E" "|$rd/systemd-coredump %P %u %g %s %t %c %h" "|$rd/systemd-coredump" "core" "/var/crash/core.%p" "core.%e.%p:%t"; do
+        for p in "|$rd/systemd-coredump %P %u %g" "|$rd/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -- %E" "|$rd/systemd-coredump %P %u %g %s %t %c %h" "|$rd/systemd-coredump" "core" "/dev/null" "core.%e.%p:%t"; do
             setcore "$PIPE" 2; rm -f "$d/sysctl.log"; printf "kernel.core_pattern=%s\nfs.suid_dumpable=0\n" "$p" > "$snap"; chmod 600 "$snap"
             mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "$p|0" ]]; grep -qF "sysctl -w kernel.core_pattern=$p fs.suid_dumpable=0" "$d/sysctl.log"
         done'
 check 'core-policy: sysctl only ever receives the validated values, even if the snapshot is swapped mid-restore' \
     mf_st "$mf_st_core"'(( EUID == 0 )) && exit 0
-        snap=$(mf_core_snapshot_path); printf "kernel.core_pattern=core\nfs.suid_dumpable=1\n" > "$snap"; chmod 600 "$snap"
+        snap=$(mf_core_snapshot_path); printf "kernel.core_pattern=core\nfs.suid_dumpable=0\n" > "$snap"; chmod 600 "$snap"
         mf_core_sessions_running() { printf "kernel.core_pattern=|/home/u/evil\nfs.suid_dumpable=0\n" > "$snap"; return 1; }
-        mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "core|1" ]]
+        mf_core_restore >/dev/null 2>&1; [[ $(getcore) == "core|0" ]]
         neg grep -q "evil" "$d/sysctl.log"; neg grep -q "sysctl -p" "$d/sysctl.log"'
 check 'core-policy: the trusted owner is fixed to root and cannot be set from the environment' \
     bash -c 'source "$1/lib/policy.sh"; source "$1/lib/host.sh"; source "$1/lib/corepolicy.sh"

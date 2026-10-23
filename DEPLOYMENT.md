@@ -66,7 +66,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `507 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `509 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -315,7 +315,7 @@ A piped core collector (for example `apport` or `systemd-coredump`) can ignore `
 
 **Impact:** this changes crash diagnostics for every application on the host. It's a temporary opt-in, and it creates no sysctl drop-in, service mask or SELinux change. Mayfly changes it only when you ask, with `core-policy apply` or the `--core-policy` flag. Keep it active for the whole life of the VMs, and restore it only after they're gone.
 
-**Automated form.** `bash mayfly.sh core-policy apply|restore|status` does what the two blocks below do. `apply` does nothing if the host already meets the requirement (a non-piped pattern and `fs.suid_dumpable=0`). Otherwise it saves the original values once per boot to `<state>/core-policy/<boot_id>/original.conf` (directories `0700`, file `0600`, created with `noclobber`), then runs `sudo sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0`. Without `sudo` it stops with an error and changes nothing. `restore` reads the saved file once, validates it, and passes only those validated values to `sudo sysctl -w`, never the file itself. Run as a normal user, it accepts a piped saved pattern only when the helper is a known crash collector (`systemd-coredump`, `apport` or `abrt-hook-ccpp`) at an absolute path that is a root-owned executable, reached through root-owned directories that are not group or world writable and with no symlinks, and when every argument is only a core specifier such as `%P`, a short option glued to one such as `-p%p`, or a bare `--`. Interpreters such as `env`, `bash` or `python3`, paths in arguments, and odd whitespace are refused. A plain pattern is accepted only from a conservative character set. Anything else is refused with a message, because the snapshot lives in your own state directory and other programs that run as you could edit it. You can always restore the original values by hand with `sysctl -w`, or in mode 1 run `sudo mayfly core-policy restore`, which reads the root-owned snapshot. `restore` also refuses while any QEMU process exists or the check fails. `status` only reads. With `--core-policy` on `launch`, `check-profile` or `setup`, Mayfly remembers whether it applied the policy and restores it on exit (including Ctrl+C, `SIGTERM` and `SIGHUP`) only if it did and no QEMU process is left. Otherwise it leaves the policy in place and tells you to run `core-policy restore` after the last session. A `SIGKILL` or a power loss skips the restore, so run `core-policy status` afterwards. In mode 1 the root wrapper does the same without `sudo`, with the snapshot under `/var/lib/mayfly/core-policy`, and `sudo mayfly core-policy ...` is available.
+**Automated form.** `bash mayfly.sh core-policy apply|restore|status` does what the two blocks below do. `apply` does nothing if the host already meets the requirement (a non-piped pattern and `fs.suid_dumpable=0`). Otherwise it saves the original values once per boot to `<state>/core-policy/<boot_id>/original.conf` (directories `0700`, file `0600`, created with `noclobber`), then runs `sudo sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0`. Without `sudo` it stops with an error and changes nothing. `restore` reads the saved file once, validates it, and passes only those validated values to `sudo sysctl -w`, never the file itself. Run as a normal user, it accepts a piped saved pattern only when the helper is a known crash collector (`systemd-coredump`, `apport` or `abrt-hook-ccpp`) at an absolute path that is a root-owned executable, reached through root-owned directories that are not group or world writable and with no symlinks, and when every argument is only a core specifier such as `%P`, a short option glued to one such as `-p%p`, or a bare `--`. Interpreters such as `env`, `bash` or `python3`, paths in arguments, and odd whitespace are refused. A plain pattern is accepted only if it is exactly `/dev/null` or a bare relative name (letters, digits and `_.%+:@=,-`, no `/`, no leading `.`, no `..`), and only with `fs.suid_dumpable=0`. `fs.suid_dumpable=1` is always refused, and `2` is accepted only with a collector pipe, because a core of a setuid process written to an absolute path would become a root-owned file. Any absolute plain path other than `/dev/null` is refused. Anything else is refused with a message, because the snapshot lives in your own state directory and other programs that run as you could edit it. You can always restore the original values by hand with `sysctl -w`, or in mode 1 run `sudo mayfly core-policy restore`, which reads the root-owned snapshot. `restore` also refuses while any QEMU process exists or the check fails. `status` only reads. With `--core-policy` on `launch`, `check-profile` or `setup`, Mayfly remembers whether it applied the policy and restores it on exit (including Ctrl+C, `SIGTERM` and `SIGHUP`) only if it did and no QEMU process is left. Otherwise it leaves the policy in place and tells you to run `core-policy restore` after the last session. A `SIGKILL` or a power loss skips the restore, so run `core-policy status` afterwards. In mode 1 the root wrapper does the same without `sudo`, with the snapshot under `/var/lib/mayfly/core-policy`, and `sudo mayfly core-policy ...` is available.
 
 Check the current values:
 
@@ -366,11 +366,17 @@ Expected: `kernel.core_pattern = /dev/null` and `fs.suid_dumpable = 0`. If only 
   [[ ${original[1]} =~ ^fs.suid_dumpable=[012]$ ]]
   pattern=${original[0]#kernel.core_pattern=}
   suid=${original[1]#fs.suid_dumpable=}
+  if [[ $pattern == \|* ]]; then
+    [[ $suid == 0 || $suid == 2 ]]
+  else
+    [[ $suid == 0 ]] && { [[ $pattern == /dev/null ]] ||
+      [[ $pattern =~ ^[A-Za-z0-9_%][A-Za-z0-9_.%+:@=,-]*$ && $pattern != *..* ]]; }
+  fi || { echo 'Saved values fail the pairing rules: do not restore from this file.' >&2; exit 1; }
   status=0
   pgrep -f '[q]emu-system-' || status=$?
   [[ $status == 1 ]] || { echo 'QEMU remains or inspection failed: do not restore.' >&2; exit 1; }
   printf 'Saved values: kernel.core_pattern=%s fs.suid_dumpable=%s\n' "$pattern" "$suid"
-  read -r -p 'Are these your original values (a piped value must name a known crash collector such as systemd-coredump or apport, owned by root), all VMs gone and no launch in progress? Type RESTORE: ' answer
+  read -r -p 'Is a piped value a crash collector you recognise (systemd-coredump, apport or abrt-hook-ccpp, owned by root), are all VMs gone and is no launch in progress? Type RESTORE: ' answer
   [[ $answer == RESTORE ]]
   sudo sysctl -w "kernel.core_pattern=$pattern" "fs.suid_dumpable=$suid"
   sysctl kernel.core_pattern fs.suid_dumpable

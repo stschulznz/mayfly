@@ -13,7 +13,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-The first command syntax-checks every script. The second prints one `ok` or `not ok` line per check and ends with a summary such as `507 passed, 0 failed`. It must exit `0`. The suite checks parsers, policy text, host predicates, and mocked build and launch failures. It doesn't boot VMs or prove routing.
+The first command syntax-checks every script. The second prints one `ok` or `not ok` line per check and ends with a summary such as `509 passed, 0 failed`. It must exit `0`. The suite checks parsers, policy text, host predicates, and mocked build and launch failures. It doesn't boot VMs or prove routing.
 
 The workflow in `.github/workflows/tests.yml` runs a `bash -n` loop over `git ls-files '*.sh'` and then `bash tests/run.sh`, in containers for `debian:13`, `ubuntu:24.04`, `fedora:latest`, `archlinux:latest` and `opensuse/tumbleweed:latest`. A separate job runs ShellCheck at error severity only.
 

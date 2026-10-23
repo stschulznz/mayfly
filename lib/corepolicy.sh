@@ -116,8 +116,17 @@ mf_core_path_trusted() {
 # executable behind root-owned, non-writable directories, whose arguments are
 # only core specifiers (%P), short options glued to a specifier (-p%p) and a
 # bare "--". Interpreters such as env, bash or python3 are never collectors.
-# Plain patterns use a conservative character set.
-[[ -v MF_CORE_COLLECTORS ]] || readonly -a MF_CORE_COLLECTORS=(systemd-coredump apport abrt-hook-ccpp)
+# Pairing rules, since the values reach sudo together: fs.suid_dumpable 1 is
+# never accepted; 2 only with a collector pipe (a core of a setuid process is
+# then written by the collector, not to a path); a plain pattern must be
+# /dev/null or a bare relative name and pairs only with 0. Absolute plain
+# paths are refused: with suid_dumpable=2 they would become root-written files.
+# The collector list is defined unconditionally so the environment cannot
+# widen it; re-sourcing keeps an already readonly array.
+[[ $(declare -p MF_CORE_COLLECTORS 2>/dev/null) == "declare -ar"* ]] || {
+    unset MF_CORE_COLLECTORS 2>/dev/null
+    readonly -a MF_CORE_COLLECTORS=(systemd-coredump apport abrt-hook-ccpp)
+}
 
 mf_core_collector_known() {
     local name
@@ -128,8 +137,9 @@ mf_core_collector_known() {
 }
 
 mf_core_pattern_safe() {
-    local pattern=$1 rest helper token
+    local pattern=$1 suid=${2:-} rest helper token
     local -a tokens
+    [[ $suid == 0 || $suid == 2 ]] || return 1
     if [[ $pattern == \|* ]]; then
         rest=${pattern#|}
         [[ $rest =~ ^[^\ ]+(\ [^\ ]+)*$ && $rest =~ ^[A-Za-z0-9_./%+:@=,\ -]+$ ]] || return 1
@@ -143,7 +153,9 @@ mf_core_pattern_safe() {
         [[ $(realpath -e -- "$helper" 2>/dev/null) == "$helper" && -f $helper && -x $helper ]] || return 1
         mf_core_path_trusted "$helper"
     else
-        [[ $pattern =~ ^[A-Za-z0-9_./%+:@=,-]+$ ]]
+        [[ $suid == 0 ]] || return 1
+        [[ $pattern == /dev/null ]] ||
+            [[ $pattern =~ ^[A-Za-z0-9_%][A-Za-z0-9_.%+:@=,-]*$ && $pattern != *..* ]]
     fi
 }
 
@@ -188,8 +200,8 @@ mf_core_restore() {
         return 0
     fi
     mf_core_can_escalate || return 1
-    if (( EUID != 0 )) && ! mf_core_pattern_safe "$MF_CORE_ORIG_PATTERN"; then
-        mf_error 'the saved core_pattern is not a trusted value, so it will not be passed to sudo. Run: sudo mayfly core-policy restore (dedicated-user install), or restore your original values by hand with sysctl -w'
+    if (( EUID != 0 )) && ! mf_core_pattern_safe "$MF_CORE_ORIG_PATTERN" "$MF_CORE_ORIG_SUID"; then
+        mf_error 'the saved core-dump values are not ones Mayfly will pass to sudo (only /dev/null or a plain relative name with fs.suid_dumpable 0, or a known crash collector with 0 or 2). Run: sudo mayfly core-policy restore (dedicated-user install), or restore your original values by hand with sysctl -w'
         return 1
     fi
     # Only the validated in-memory values reach sysctl, never the file.
