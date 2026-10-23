@@ -43,7 +43,7 @@ What this doesn't mean, and why the claim "no trace" is not safe to make:
 - Anything you log in to, search for or type identifies you to that site, whichever route you use.
 - Session memory can reach disk if your host swaps, hibernates or writes a crash dump. Mayfly checks for these when a session starts: `launch` refuses to run on a host with disk swap, a configured resume device, a loaded crash kernel or a piped core-dump handler, and `preflight` warns about disk swap. It doesn't watch for them during a session. See [What Mayfly does not protect against](#what-mayfly-does-not-protect-against).
 - It protects the visit from your computer's records, not from someone who controls the computer while the session runs.
-- Leak-proofing is by design and not yet proven by packet capture. See [Tested](#tested).
+- Leak-proofing is by design. A packet-counter test of all three entries found nothing leaving outside the tunnel, but a test can't prove that no leak path exists. See [Tested](#tested).
 
 ## How it works
 
