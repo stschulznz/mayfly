@@ -245,9 +245,8 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 **Still unverified:**
 
-- Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); repeated runs, tunnel loss in the middle of a session, and the other failure paths remain unverified.
-- Restart paths, tunnel loss in the middle of a session, and a gateway or router crash. The startup case with an unreachable endpoint was observed once.
-- Longer and repeated runs of the tests above.
+- The leak test in run modes 2 and 3, and on any host other than the one tested. The [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) has only been run in run mode 1.
+- Restart paths, tunnel loss in the middle of a session, and a gateway or router crash.
 - Update suppression in either browser, especially Tor Browser.
 - Firefox's active policies (`about:policies`) and content sandbox.
 - An SELinux denial survey.
