@@ -245,7 +245,7 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 **Still unverified:**
 
 - Packet-capture proof that there's no DNS, IPv6 or direct fallback. A [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) exists. It has been run once per entry (see the table above); repeated runs, tunnel loss in the middle of a session, and the other failure paths remain unverified.
-- Startup, restart and tunnel-loss failure paths.
+- Restart paths, tunnel loss in the middle of a session, and a gateway or router crash. The startup case with an unreachable endpoint was observed once.
 - Live proof that session writes stay in RAM.
 - Update suppression in either browser, especially Tor Browser.
 - Firefox's active policies (`about:policies`) and content sandbox.
