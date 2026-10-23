@@ -2,12 +2,13 @@
 
 Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: packet-level leak proof is still missing (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
 
-**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. Don't use it for anonymity-sensitive work.
+**Status: experimental (v0.1.0).** Live testing covers one host. Read [Tested](#tested) and [What Mayfly does not protect against](#what-mayfly-does-not-protect-against) before you rely on it. It is a privacy tool, not a guarantee of anonymity, and its leak tests are still missing, so don't stake your safety on it yet.
 
 Licence: [MIT](LICENSE).
 
 ## Contents
 
+- [What Mayfly is for](#what-mayfly-is-for)
 - [How it works](#how-it-works)
 - [Threat model](#threat-model)
 - [What Mayfly does not protect against](#what-mayfly-does-not-protect-against)
@@ -20,6 +21,29 @@ Licence: [MIT](LICENSE).
 - [Windows](#windows)
 - [Reference](#reference)
 - [Documentation](#documentation)
+
+## What Mayfly is for
+
+Mayfly is for visiting sites without leaving a record of the visit on your computer, and without your home connection being the one the site sees. You pick how the visit leaves your machine:
+
+| Entry | The site sees | Your internet provider sees | Your VPN provider sees |
+|---|---|---|---|
+| Firefox over WireGuard | The VPN's address, not yours | An encrypted connection to the VPN | Which sites you visit, and when |
+| Tor Browser over WireGuard | A Tor exit relay's address | An encrypted connection to the VPN | That you use Tor, not which sites |
+| I2P over WireGuard (eepsites only) | Nothing about you. Eepsites are reached through I2P tunnels | An encrypted connection to the VPN | That the traffic looks like I2P, not which eepsites |
+
+What you get when the session ends and you shut the machine down or lock it as you normally would:
+
+- **No browsing record on your computer.** History, cookies, caches, bookmarks and downloads lived in RAM and are gone. Nothing in your normal browser or home directory ever saw the visit.
+- **No record of the visit in your desktop's normal network setup.** Your desktop's own connection doesn't carry the traffic to the sites; only the encrypted tunnel to your VPN does.
+
+What this doesn't mean, and why the claim "no trace" is not safe to make:
+
+- The VPN provider, Tor relays, I2P peers and the sites themselves keep their own records. Mayfly can't delete those.
+- Anything you log in to, search for or type identifies you to that site, whichever route you use.
+- Session memory can reach disk if your host swaps, hibernates or writes a crash dump. See [What Mayfly does not protect against](#what-mayfly-does-not-protect-against).
+- It protects the visit from your computer's records, not from someone who controls the computer while the session runs.
+- Leak-proofing is by design and not yet proven by packet capture. See [Tested](#tested).
 
 ## How it works
 
