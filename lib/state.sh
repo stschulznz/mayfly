@@ -275,7 +275,10 @@ mf_cmd_launch() {
             base=${MF_ARGS[0]} profile=${MF_ARGS[1]} parent=${MF_ARGS[2]:-/dev/shm} ;;
         *) usage; exit 64 ;;
     esac
-    printf '%s\n' "$MF_REMINDER" >&2
+    if [[ -z ${MF_REMINDER_SHOWN:-} ]]; then
+        MF_REMINDER_SHOWN=1
+        printf '%s\n' "$MF_REMINDER" >&2
+    fi
     if (( MF_CORE_FLAG )); then
         mf_core_guarded mf_launch_sub "$base" "$profile" "$parent" "$root"
     else

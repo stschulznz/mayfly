@@ -176,14 +176,20 @@ mf_core_apply() {
     if (( EUID != 0 )); then
         printf '%s\n' 'Mayfly will now run sudo to set kernel.core_pattern=/dev/null and fs.suid_dumpable=0.' \
             'This changes crash-dump behaviour for the whole host and will be undone when the session ends.'
+    else
+        printf '%s\n' 'Setting kernel.core_pattern=/dev/null and fs.suid_dumpable=0 for this host.' \
+            'This changes crash-dump behaviour for the whole host and will be undone when the session ends.'
     fi
     MF_CORE_OURS=1
-    mf_core_sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0 ||
+    mf_core_sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0 >/dev/null ||
         { mf_error 'sysctl failed; if only one value changed, run: mayfly core-policy restore'; return 1; }
     mf_core_satisfied ||
         { mf_error 'the core-dump policy is not in effect after sysctl; do not start a VM'; return 1; }
     mf_core_values_show
-    printf '%s\n' "$MF_REMINDER" >&2
+    if [[ -z ${MF_REMINDER_SHOWN:-} ]]; then
+        MF_REMINDER_SHOWN=1
+        printf '%s\n' "$MF_REMINDER" >&2
+    fi
 }
 
 mf_core_restore() {

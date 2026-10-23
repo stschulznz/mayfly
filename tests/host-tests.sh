@@ -295,3 +295,7 @@ check 'doctor refuses when the service user cannot use /dev/kvm' \
 check 'doctor warns when keystroke injection is enabled' \
     mf_sub 'mf_check_install() { :; }; sysctl() { printf "1\n"; }; mf_run_as() { return 0; }
         out=$( (mf_cmd_doctor) 2>&1 ); [[ $out == *"legacy_tiocsti"* ]]'
+
+check 'wrapper passes the reminder-shown flag to the launcher only when it already printed it' \
+    mf_sub 'MF_REMINDER_SHOWN=1; mf_launch_cmd t 0 /run/mayfly/wayland-0; [[ " ${MF_CMD[*]} " == *" MF_REMINDER_SHOWN=1 "* ]]
+        unset MF_REMINDER_SHOWN; mf_launch_cmd t 0 /run/mayfly/wayland-0; [[ " ${MF_CMD[*]} " != *MF_REMINDER_SHOWN* ]]'

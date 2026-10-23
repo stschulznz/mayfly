@@ -156,6 +156,7 @@ mf_launch_cmd() {
     if [[ $diag == 1 ]]; then
         extra+=(MAYFLY_DIAG=1)
     fi
+    [[ -z ${MF_REMINDER_SHOWN:-} ]] || extra+=(MF_REMINDER_SHOWN=1)
     mf_env_cmd "${extra[@]}" bash "$MF_PROG/mayfly.sh" launch \
         "$MF_STATE/bases/$name" "$MF_STATE/secrets/wireguard.conf" /dev/shm
 }
