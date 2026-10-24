@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Mayfly logo: a geometric low-poly mayfly with cyan wings and yellow edges on a dark circle" width="200">
+</p>
+
 # Mayfly
+
+<p align="center">
+  <img src="assets/banner.png" alt="Illustration of a hooded netrunner at a desk full of glowing screens showing network graphs and mayflies, in front of a rainy neon city" width="100%">
+</p>
 
 Mayfly runs your browser in a disposable virtual machine (VM) behind a default-deny gateway VM. Every session starts from a clean base image, keeps its writes in RAM, and is deleted when you close the browser. You choose one of three entries per session: Firefox over WireGuard, Tor Browser over WireGuard, or an I2P entry for eepsites only. Your normal desktop keeps its existing network. By design, session traffic leaves only through the WireGuard profile you provide, and the gateway drops anything else. That is design intent, not a proven result: a packet-counter check has passed but isn't a proof (see [Tested](#tested)). Mayfly exists for people who want browsing state that doesn't survive the session and a network path designed to fail closed, without running a full privacy-focused operating system.
 
