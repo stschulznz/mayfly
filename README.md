@@ -242,6 +242,7 @@ bash mayfly.sh core-policy apply|restore|status
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |
 | Firefox hardening policy and sandbox | `about:policies` in the Firefox entry lists the policies as active, and `about:support` shows a content process sandbox level of 6 (enabled). |
+| Tor Browser security level | The level reads Standard, which is Tor Browser's default. Mayfly doesn't change it. |
 | RAM-only writes (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
 | Leak test, all three entries (run mode 1) | Per-user packet counters on that host. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
 | Tunnel-down test (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). |
@@ -255,11 +256,11 @@ On the live host, Firefox over WireGuard, Tor Browser and the I2P entry worked. 
 
 - The leak test in run modes 2 and 3, and on any host other than the one tested. The [leak test](DEPLOYMENT.md#12-leak-test-check-that-nothing-leaves-outside-the-tunnel) has only been run in run mode 1.
 - Restart paths, tunnel loss in the middle of a session, and a gateway or router crash.
-- Update suppression in either browser, especially Tor Browser.
+- Update suppression in either browser. Tor Browser showed no update prompt in the sessions run, which isn't proof that updates are blocked.
 - A policy-by-policy check of Firefox beyond `about:policies` listing them as active.
 - A full SELinux denial survey. `ausearch -m avc -ts recent` found no denials after one session.
 
-Also unverified: the Tor Browser Security Level, I2P joining time and SSU2 behavior at the guest's 1280-byte MTU, AppArmor enforcement in the guest, and WireGuard key rotation.
+Also unverified: I2P joining time and SSU2 behavior at the guest's 1280-byte MTU, and AppArmor enforcement in the guest.
 
 ## Windows
 
