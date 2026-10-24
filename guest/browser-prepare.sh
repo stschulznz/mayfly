@@ -70,7 +70,7 @@ mf_browser_update_policies /etc/firefox/policies/policies.json \
     /opt/tor-browser/Browser/distribution/policies.json
 # System-wide files must be traversable/readable by the desktop user even
 # though the appliance build shell uses umask 077.
-chmod 755 /usr/share/xsessions /etc/lightdm/lightdm.conf.d /etc/firefox/policies
+chmod 755 /usr/share/xsessions /etc/lightdm/lightdm.conf.d /etc/firefox /etc/firefox/policies
 chmod 644 /usr/share/xsessions/mayfly.desktop \
     /etc/lightdm/lightdm.conf.d/50-mayfly.conf \
     /etc/firefox/policies/policies.json

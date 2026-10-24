@@ -107,6 +107,8 @@ repair_browser_policy() (
         [[ $(stat -c %a "$policy") == 644 &&
            $(stat -c %a "${policy%/*}") == 755 ]] || return 1
     done
+    # The desktop user must be able to traverse every parent of the Firefox policy file.
+    [[ $(stat -c %a "$sandbox/etc/firefox") == 755 ]] || return 1
 )
 
 # Deliberately narrow fake QEMU 8 stream parser, based on v8.0.0 qapi/net.json.
