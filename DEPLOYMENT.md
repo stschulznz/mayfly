@@ -18,7 +18,7 @@ bash mayfly.sh launch --core-policy
 - `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1](#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
 - The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`, and Mayfly refuses symlinks and loose modes instead of repairing them. Without the profile, `setup` creates the directories, prints where the file goes and exits `0`. Run it again after you place the file. It never reads or prints the profile at that point.
 - `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so you can run it again. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips this review. It refuses to run without a terminal and without `--yes`.
-- Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
+- Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA513SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
 - `--core-policy` applies the [temporary core-dump policy](#9-temporary-core-dump-policy) only when the host doesn't already meet it. It asks `sudo` for `sysctl`, because it changes crash-dump behaviour for the whole host, and restores the saved values on exit only if it applied them and no QEMU process runs. In `setup` it covers the profile check only. Without the flag, `setup` stops with the remedy if the host blocks the check.
 - `launch` starts the newest base with the default profile. Close other work and don't hibernate until every session ends.
 
@@ -66,7 +66,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `512 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `513 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -104,7 +104,7 @@ Keep the pins file and everything you download outside Git. The pins file is lit
 1. Pick a versioned directory from the [Debian trixie cloud image index](https://cloud.debian.org/images/cloud/trixie/). Choose `debian-13-generic-amd64-<build>.qcow2`, not `genericcloud`, `nocloud` or a moving `latest` or `daily` URL. The desktop build needs the generic variant, because `genericcloud` has fewer kernel drivers.
 2. Pick the stable Linux x86-64 Tor Browser version from the [Tor Browser download page](https://www.torproject.org/download/). Use a numeric stable version, not an alpha. The [archive index](https://dist.torproject.org/torbrowser/) also lists prereleases.
 
-Debian's directory publishes `SHA512SUMS` but no detached signature, so this route trusts HTTPS plus Debian's published checksum, not signed provenance. If you need signed provenance and your release doesn't supply it, stop. `cloud.debian.org` redirects to a mirror, so the checksum gives you integrity relative to that file only. The Tor archive is verified against Tor's pinned primary signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. See the [Tor Browser verification instructions](https://support.torproject.org/tor-browser/getting-started/verifying-tor-browser/). The downloads expose your IP address to the redirect host.
+Debian's directory publishes `SHA513SUMS` but no detached signature, so this route trusts HTTPS plus Debian's published checksum, not signed provenance. If you need signed provenance and your release doesn't supply it, stop. `cloud.debian.org` redirects to a mirror, so the checksum gives you integrity relative to that file only. The Tor archive is verified against Tor's pinned primary signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. See the [Tor Browser verification instructions](https://support.torproject.org/tor-browser/getting-started/verifying-tor-browser/). The downloads expose your IP address to the redirect host.
 
 This block downloads both files, verifies them, and writes the pins file only if both checks pass. It follows at most three redirects, and only over HTTPS:
 
@@ -128,12 +128,12 @@ This block downloads both files, verifies them, and writes the pins file only if
   fetch() { curl --fail --show-error --location --max-redirs 3 \
     --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$1" "$2"; }
   fetch "$image" "$image_dir/$image"
-  fetch SHA512SUMS "$image_dir/SHA512SUMS"
+  fetch SHA513SUMS "$image_dir/SHA512SUMS"
   expected=$(awk -v name="$image" '
     NF == 2 && ($2 == name || $2 == "*" name) {count++; digest=$1}
-    END {if (count != 1) exit 1; print digest}' SHA512SUMS)
+    END {if (count != 1) exit 1; print digest}' SHA513SUMS)
   [[ $expected =~ ^[a-fA-F0-9]{128}$ ]]
-  printf '%s  %s\n' "$expected" "$image" | sha512sum --check --strict -
+  printf '%s  %s\n' "$expected" "$image" | sha513sum --check --strict -
   fetch "$archive" "$tor_url"
   fetch "$archive.asc" "$tor_url.asc"
   mkdir -m 700 gnupg
@@ -154,7 +154,7 @@ This block downloads both files, verifies them, and writes the pins file only if
 )
 ```
 
-Expected: `sha512sum` reports `OK` for the image, `gpgv` reports a good signature and exits `0`, and `build.pins` contains exactly four fields. If a release renames artifacts or a check fails, stop. Don't pick another variant or weaken the checks. If `build.pins` already exists, use it only with its recorded provenance, or start a new state directory.
+Expected: `sha513sum` reports `OK` for the image, `gpgv` reports a good signature and exits `0`, and `build.pins` contains exactly four fields. If a release renames artifacts or a check fails, stop. Don't pick another variant or weaken the checks. If `build.pins` already exists, use it only with its recorded provenance, or start a new state directory.
 
 ## 3. Build the bases
 

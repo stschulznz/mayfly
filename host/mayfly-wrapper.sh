@@ -292,8 +292,8 @@ mf_cmd_launch() {
 }
 
 mf_launch_ns() {
-    env MF_IN_NS=1 unshare --mount --propagation private -- \
-        "$MF_SELF" __ns-launch "$@"
+    env MF_IN_NS=1 ${MF_REMINDER_SHOWN:+MF_REMINDER_SHOWN=1} \
+        unshare --mount --propagation private -- "$MF_SELF" __ns-launch "$@"
 }
 
 MF_NS_TARGET=''

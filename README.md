@@ -228,7 +228,7 @@ bash mayfly.sh launch [--core-policy] [NAME]
 bash mayfly.sh core-policy apply|restore|status
 ```
 
-- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. Versions are chosen automatically from upstream, so compare them with the official Debian and Tor Browser pages if you need to guard against a downgrade. `--yes` skips this review. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
+- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA513SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. Versions are chosen automatically from upstream, so compare them with the official Debian and Tor Browser pages if you need to guard against a downgrade. `--yes` skips this review. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
 - `build` names the base `base-YYYYMMDD` unless you give a name, and never overwrites an existing base.
 - The absolute-path forms still work and are what the dedicated-user wrapper uses: `build ABS-PINS ABS-NEW-BASE` and `launch ABS-BASE ABS-PROFILE [RAM-PARENT]`.
 - [DEPLOYMENT.md](DEPLOYMENT.md#manual-and-advanced-steps) has the manual steps, host diagnostics, the leak test and troubleshooting.
@@ -237,7 +237,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (512 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (513 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. A bookmark made in one session was absent from the next. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |
@@ -325,7 +325,7 @@ The pins file is literal `key=value` data, not shell. Supply each field once.
 
 The parser accepts only these four fields, blank lines and full-line comments. Quotes, shell variables and command substitutions aren't expanded. Mayfly ships no sample hashes. The fixture in `tests/fixtures/synthetic.pins` is deliberately unusable.
 
-Build checks both SHA-256 pins. It also fetches the matching Tor signature and signing key and verifies them with `gpgv` against the pinned primary fingerprint. It doesn't verify a Debian signature, because Debian's cloud image directory publishes `SHA512SUMS` without a detached signature. See [Get and verify downloads](DEPLOYMENT.md#2-get-and-verify-downloads).
+Build checks both SHA-256 pins. It also fetches the matching Tor signature and signing key and verifies them with `gpgv` against the pinned primary fingerprint. It doesn't verify a Debian signature, because Debian's cloud image directory publishes `SHA513SUMS` without a detached signature. See [Get and verify downloads](DEPLOYMENT.md#2-get-and-verify-downloads).
 
 A successful build produces `gateway.qcow2` and `browser.qcow2`, each with a 16 GiB virtual size, mode `0444` and a `.sha256` companion file. Guest package versions from Debian repositories aren't pinned, so builds are not reproducible.
 

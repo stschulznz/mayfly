@@ -299,3 +299,8 @@ check 'doctor warns when keystroke injection is enabled' \
 check 'wrapper passes the reminder-shown flag to the launcher only when it already printed it' \
     mf_sub 'MF_REMINDER_SHOWN=1; mf_launch_cmd t 0 /run/mayfly/wayland-0; [[ " ${MF_CMD[*]} " == *" MF_REMINDER_SHOWN=1 "* ]]
         unset MF_REMINDER_SHOWN; mf_launch_cmd t 0 /run/mayfly/wayland-0; [[ " ${MF_CMD[*]} " != *MF_REMINDER_SHOWN* ]]'
+
+check 'namespace re-run receives the reminder-shown flag only when it was already printed' \
+    mf_sub 'env() { MF_T="$*"; }; MF_SELF=/x
+        MF_REMINDER_SHOWN=1; mf_launch_ns 1000 wayland-0 0 t; [[ $MF_T == *" MF_REMINDER_SHOWN=1 "* ]]
+        unset MF_REMINDER_SHOWN; mf_launch_ns 1000 wayland-0 0 t; [[ $MF_T != *MF_REMINDER_SHOWN* ]]'
