@@ -12,6 +12,7 @@ Licence: [MIT](LICENSE).
 - [How it works](#how-it-works)
 - [Threat model](#threat-model)
 - [What Mayfly does not protect against](#what-mayfly-does-not-protect-against)
+- [When you need stronger protection](#when-you-need-stronger-protection)
 - [Run modes](#run-modes)
 - [The three entries](#the-three-entries)
 - [Requirements](#requirements)
@@ -117,6 +118,30 @@ Update controls are written at build time by [`guest/browser-prepare.sh`](guest/
 | `media.gmp-manager.updateEnabled` and `media.gmp-provider.enabled` | `false`, status `locked` |
 
 These are source controls, not proof of effective runtime behavior. See [Tested](#tested).
+
+## When you need stronger protection
+
+Mayfly runs on top of your everyday operating system. Everything it does depends on that system being trustworthy, so it can't protect a session from malware, a keylogger or a compromised kernel on the host. If you need protection from the computer itself, use a system that doesn't depend on it.
+
+[Tails](https://tails.net/) is built for that. You start the computer from a USB stick instead of your normal system. Tails runs from memory and doesn't use the computer's hard disk. It sends all internet traffic through the Tor network and blocks applications that try to connect without Tor. When you shut down, the memory is erased and nothing remains on the computer. Because it doesn't start your installed system, malware on that system doesn't run during the session.
+
+Tails also has limits. It can't protect you if you install it from an infected computer or use it on a computer with malicious hardware, such as a keylogger. See the Tails pages for the details:
+
+- [About Tails](https://tails.net/about/)
+- [Warnings: Tails is safe but not magic](https://tails.net/doc/about/warnings/)
+- [Download and install Tails](https://tails.net/install/)
+- [System requirements](https://tails.net/doc/about/requirements/)
+
+Mayfly and Tails fit different needs:
+
+| | Mayfly | Tails |
+|---|---|---|
+| Runs on | Your installed system, in a VM | A USB stick, instead of your installed system |
+| Protection from the host | None. A compromised host can read the session. | Strong, because your installed system doesn't run |
+| Network | Your own VPN, Tor Browser through the VPN, or I2P | Tor for everything |
+| Convenience | Use it next to your normal work, no restart | Restart the computer to use it |
+
+If your threat includes the computer you're using, choose Tails. Use Mayfly when you want a disposable browser session beside your normal work and you trust the host.
 
 ## Run modes
 
