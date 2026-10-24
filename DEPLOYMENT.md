@@ -6,31 +6,60 @@ Mayfly is experimental. Live testing covers one host (Bazzite), and the commands
 
 ## Quick start
 
-Run mode 2, as your normal user in a desktop terminal on a native Wayland session:
+### Before you start
+
+You need:
+
+- **A WireGuard profile from a VPN provider.** Mayfly isn't a VPN and doesn't provide one. Download a WireGuard configuration file from your provider's account page. All three entries send their traffic through it, and the launcher refuses to start without it. The file has to match the [restricted format](README.md#wireguard-profile-format). Provider-generated files often don't, so check it with `check-profile` and edit it if needed.
+- **A native Wayland desktop session, KVM, and about 16 GiB of free memory.** `preflight` checks these.
+- **A terminal in that desktop session.** Run every command below from it, not over SSH.
+
+Choose a run mode. Mode 2 is simpler. Mode 1 is stronger, because the VMs run as a separate user. See [Run modes](README.md#run-modes).
+
+### Run mode 2: same user
+
+Run these as your normal user:
 
 ```bash
 bash mayfly.sh preflight
-(umask 077; mkdir -p ~/.local/state/mayfly/secrets) && install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+bash mayfly.sh setup --core-policy
+```
+
+The first `setup` run creates the state directory and stops because the profile is missing. It prints the path where the file goes. Place the profile there, then run `setup` again:
+
+```bash
+install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
 bash mayfly.sh setup --core-policy
 bash mayfly.sh launch --core-policy
 ```
 
+You don't create anything by hand. `setup` creates the state directory and its subdirectories, and you only supply the profile.
+
 - `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1](#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
-- The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`, and Mayfly refuses symlinks and loose modes instead of repairing them. Without the profile, `setup` creates the directories, prints where the file goes and exits `0`. Run it again after you place the file. It never reads or prints the profile at that point.
-- `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so running it again is safe. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips this review. It refuses to run without a terminal and without `--yes`.
+- The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`. If one already exists with the wrong owner or mode, or is a symlink, Mayfly refuses it instead of repairing it. Without the profile, `setup` prints where the file goes and exits `0`, and it never reads or prints the profile at that point.
+- `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so running it again is safe. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips that review.
 - Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
 - `--core-policy` applies the [temporary core-dump policy](#9-temporary-core-dump-policy) only when the host doesn't already meet it. It asks `sudo` for `sysctl`, because it changes crash-dump behaviour for the whole host, and restores the saved values on exit only if it applied them and no QEMU process runs. In `setup` it covers the profile check only. Without the flag, `setup` stops with the remedy if the host blocks the check.
 - `launch` starts the newest base with the default profile. Close other work and don't hibernate until every session ends.
 
-Run mode 1 (dedicated `mayfly` user), after the packages are installed and the profile is at the default path:
+### Run mode 1: dedicated user
+
+Mode 1 needs the packages from `preflight`, and the profile at the same default path as mode 2, before the installer runs. The installer is what creates the `mayfly` user and `/var/lib/mayfly`. `sudo mayfly setup` doesn't create them.
 
 ```bash
+bash mayfly.sh preflight
+(umask 077; mkdir -p ~/.local/state/mayfly/secrets)
+install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
 sudo bash host/install-host.sh
 sudo mayfly setup
 sudo mayfly launch --core-policy
 ```
 
-The installer uses `~/.local/state/mayfly/secrets/wireguard.conf` and `pins/build.pins` from the user who ran `sudo`, if they exist, through its safe-read path. Pass `--profile` or `--pins` to use other files. [Step 10](#10-run-as-a-dedicated-user-mode-1) explains what it installs, and you should review it before you run it.
+- The `~/.local/state/mayfly/secrets` directory is only a staging place for the profile. The installer copies the file into `/var/lib/mayfly/secrets` for the `mayfly` user without printing it. After that, Mayfly doesn't use your copy.
+- The installer creates the no-login `mayfly` system user if it doesn't exist, creates `/var/lib/mayfly` with the right owners and modes, installs a root-owned copy of the program in `/usr/local/lib/mayfly`, and installs the `/usr/local/sbin/mayfly` wrapper. It uses the profile and `pins/build.pins` from the user who ran `sudo`, if they exist, through its safe-read path. Pass `--profile` or `--pins` to use other files. It doesn't reboot or touch your network settings. Read [step 10](#10-run-as-a-dedicated-user-mode-1) and review the installer before you run it.
+- `sudo mayfly setup` then runs `fetch-pins` and `build` as the `mayfly` user, in `/var/lib/mayfly`, and `sudo mayfly launch` starts the newest base.
+- If you ran the installer before placing the profile, `sudo mayfly setup` stops with "the WireGuard profile is missing". Place the profile as above and run the installer again. Add `--replace` only if a profile is already installed and you want to overwrite it.
+- If `sudo` can't find `mayfly`, use `/usr/local/sbin/mayfly`.
 
 ## Manual and advanced steps
 

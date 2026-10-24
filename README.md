@@ -214,7 +214,9 @@ Preflight leaves out packages that are already present, so your output may be sh
 
 ## Quick start
 
-This is the shortest path for run mode 2 (your own user, native host). Mayfly keeps everything it needs in `~/.local/state/mayfly` (or `$MAYFLY_HOME`, or `$XDG_STATE_HOME/mayfly`).
+You need a WireGuard profile from a VPN provider before you start. Mayfly isn't a VPN and doesn't provide one. Download the WireGuard configuration file from your provider's account page. The launcher refuses to start without it. You don't create anything else by hand.
+
+This is the shortest path for run mode 2 (your own user, native host). Mayfly keeps everything it needs in `~/.local/state/mayfly` (or `$MAYFLY_HOME`, or `$XDG_STATE_HOME/mayfly`) and creates the subdirectories itself.
 
 ```bash
 git clone https://github.com/stschulznz/mayfly.git && cd mayfly
@@ -249,7 +251,7 @@ Run mode 1 (dedicated user) has more steps than mode 2, in this order:
 
 1. Run `bash mayfly.sh preflight` and install the packages it prints, as above.
 2. Place your WireGuard profile at `~/.local/state/mayfly/secrets/wireguard.conf` with mode `0600`, as in step 2 above, before you run the installer. The installer imports it for the `mayfly` user, and `sudo mayfly setup` stops with "the WireGuard profile is missing" without it.
-3. Read `host/install-host.sh`, then run `sudo bash host/install-host.sh`.
+3. Read `host/install-host.sh`, then run `sudo bash host/install-host.sh`. The installer creates the no-login `mayfly` user and `/var/lib/mayfly`, and copies the profile in. `sudo mayfly setup` doesn't create the user.
 4. Run `sudo mayfly setup`, then `sudo mayfly launch --core-policy`. If `sudo` can't find `mayfly`, use `/usr/local/sbin/mayfly`.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
