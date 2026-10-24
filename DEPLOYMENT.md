@@ -11,7 +11,7 @@ Mayfly is experimental. Live testing covers one host (Bazzite), and the commands
 You need:
 
 - **A WireGuard profile from a VPN provider.** Mayfly isn't a VPN and doesn't provide one. Download a WireGuard configuration file from your provider's account page. All three entries send their traffic through it, and the launcher refuses to start without it. The file has to match the [restricted format](README.md#wireguard-profile-format). Provider-generated files often don't, so check it with `check-profile` and edit it if needed.
-- **A native Wayland desktop session, KVM, and about 16 GiB of free memory.** `preflight` checks these.
+- **A Wayland desktop session, KVM, and about 16 GiB of free memory.** `preflight` checks these. Wayland is the system that draws your desktop, and the older one is X11. Mayfly supports only Wayland. Check yours with `echo $XDG_SESSION_TYPE`, which prints `wayland` or `x11`. If it prints `x11`, log out and choose a Wayland session on the login screen, often named "Plasma (Wayland)" or "GNOME" in place of the "Xorg" or "X11" entry. Most current default desktops use Wayland, but Xfce and MATE still default to X11. See the [README requirements](README.md#requirements).
 - **A terminal in that desktop session.** Run every command below from it, not over SSH.
 
 Choose a run mode. Mode 2 is simpler. Mode 1 is stronger, because the VMs run as a separate user. See [Run modes](README.md#run-modes).

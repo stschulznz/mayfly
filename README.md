@@ -188,7 +188,7 @@ Limits to expect:
 ## Requirements
 
 - An x86_64 Linux host with hardware virtualization and read/write access to `/dev/kvm`.
-- A **native Wayland session**. Only native Wayland sessions are supported and tested. Preflight warns when it finds none.
+- A **Wayland desktop session**. Wayland is the system that draws your desktop. The older one is X11. Only native Wayland sessions are supported and tested, and preflight warns when it finds none. To check yours, run `echo $XDG_SESSION_TYPE` in a terminal. It prints `wayland` or `x11`. Most current default desktops use Wayland, including Fedora Workstation, Ubuntu 24.04, Debian 13 with GNOME or KDE Plasma, and Bazzite with KDE Plasma. Xfce and MATE still default to X11. If you see `x11`, log out and pick a Wayland session on the login screen, often named "Plasma (Wayland)" or "GNOME" in place of the "Xorg" or "X11" entry. Gaming-mode sessions such as Bazzite's Steam Gaming Mode aren't supported, so use the desktop session.
 - 16 GiB of available RAM recommended. The launcher requires 16 GiB available at the check.
 - Native QEMU 8.0 or later with the GTK display and the `user` and `stream` network backends.
 - A WireGuard profile that you provide, in the [restricted format](#wireguard-profile-format) below. Keep it outside the source directory and never commit it to Git.
