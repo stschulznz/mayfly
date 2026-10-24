@@ -172,15 +172,24 @@ mf_preflight() {
     if [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then
         printf '  ok       /dev/kvm is usable by you\n'
     elif [[ -c /dev/kvm ]]; then
-        printf '  WARNING  /dev/kvm exists but you cannot use it; see your distribution for the kvm group\n'
+        local kvm_group
+        kvm_group=$(stat -c %G /dev/kvm 2>/dev/null || :)
+        printf '  WARNING  /dev/kvm exists but you cannot use it\n'
+        if [[ -n $kvm_group && $kvm_group != root && $kvm_group != UNKNOWN ]]; then
+            printf '           Fix: sudo usermod -aG %s "$USER", then log out and back in\n' "$kvm_group"
+        else
+            printf '           Fix: check the permissions of /dev/kvm for your distribution, then log out and back in\n'
+        fi
     else
-        printf '  MISSING  /dev/kvm; enable hardware virtualization in the firmware and load kvm\n'
+        printf '  MISSING  /dev/kvm; hardware virtualization is off or the kvm module is not loaded\n'
+        printf '           Fix: enable virtualization (Intel VT-x or AMD-V) in the firmware setup, then run: sudo modprobe kvm_intel (Intel) or sudo modprobe kvm_amd (AMD)\n'
         status=1
     fi
     if [[ -n ${WAYLAND_DISPLAY:-} || -n $(compgen -G "/run/user/$UID/wayland-*" 2>/dev/null | head -n 1) ]]; then
         printf '  ok       Wayland session\n'
     else
         printf '  WARNING  no Wayland session found; X11-only sessions are not supported\n'
+        printf '           Fix: log out and choose a Wayland session on the login screen (check with: echo $XDG_SESSION_TYPE)\n'
     fi
     local kb
     kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || :)
@@ -188,6 +197,7 @@ mf_preflight() {
         printf '  ok       at least 16 GiB of memory available\n'
     else
         printf '  WARNING  less than 16 GiB of memory available; the launcher requires 16 GiB\n'
+        printf '           Fix: close other applications, then run preflight again\n'
     fi
     local swaps=${MF_PROC_SWAPS:-/proc/swaps} dev disk_swap=0
     if [[ -r $swaps ]]; then
@@ -196,6 +206,7 @@ mf_preflight() {
         done < "$swaps"
         if (( disk_swap )); then
             printf '  WARNING  disk swap is active; session memory could be written to disk. The launcher refuses to start until it is off\n'
+            printf '           Fix: see DEPLOYMENT.md step 8 for how to turn it off safely (zram swap is fine)\n'
         else
             printf '  ok       no disk swap\n'
         fi
@@ -208,10 +219,12 @@ mf_preflight() {
         if (( readable )); then
             printf '  ok       a kernel image is readable (needed to build images)\n'
         else
-            printf '  WARNING  no kernel image is readable; image builds fail. Ubuntu: sudo chmod 0644 /boot/vmlinuz-*\n'
+            printf '  WARNING  no kernel image is readable; image builds fail\n'
+            printf '           Fix (Ubuntu): sudo chmod 0644 /boot/vmlinuz-*\n'
         fi
     else
-        printf '  WARNING  no kernel image found for the image-build tools; install a kernel package\n'
+        printf '  WARNING  no kernel image found for the image-build tools\n'
+        printf '           Fix: install your distribution'"'"'s kernel package, for example linux-image-amd64 on Debian\n'
     fi
 
     if (( ${#packages[@]} )); then

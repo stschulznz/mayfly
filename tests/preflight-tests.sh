@@ -102,3 +102,12 @@ check 'preflight warns about disk swap' mf_swap_case 'Filename Type Size Used Pr
 check 'preflight accepts zram-only swap' mf_swap_case 'Filename Type Size Used Priority\n/dev/zram0 partition 1 0 100\n' 'ok       no disk swap'
 check 'preflight accepts no swap' mf_swap_case 'Filename Type Size Used Priority\n' 'ok       no disk swap'
 check 'launch prints the do-not-hibernate reminder before starting' bash -c 'grep -q "do not hibernate" "$1/lib/corepolicy.sh" && grep -A3 "printf .%s.n. \"\$MF_REMINDER\"" "$1/lib/state.sh" | grep -q mf_launch' _ "$project"
+
+check 'preflight: the disk swap warning says how to fix it' \
+    mf_swap_case 'Filename Type Size Used Priority\n/swapfile file 1 0 -2\n' 'Fix: see DEPLOYMENT.md step 8'
+check 'preflight: every host-check warning or missing item is followed by a Fix line' \
+    bash -c 'f="$1/lib/preflight.sh"
+        total=$(grep -cE "printf .  (WARNING|MISSING)  .*\\\\n.$" "$f")
+        host=$(sed -n "/Host checks:/,\$p" "$f" | grep -cE "printf .  (WARNING|MISSING)  ")
+        fixes=$(sed -n "/Host checks:/,\$p" "$f" | grep -cE "printf .           Fix")
+        (( host >= 6 && fixes >= host ))' _ "$project"

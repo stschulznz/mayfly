@@ -226,7 +226,7 @@ bash mayfly.sh setup --core-policy
 bash mayfly.sh launch --core-policy
 ```
 
-1. `preflight` changes nothing. It prints the package install command for your system. Run that command, then run `preflight` again until it says `Ready for the next step`. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1 of DEPLOYMENT.md](DEPLOYMENT.md#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
+1. `preflight` changes nothing. It prints the package install command for your system. Run that command, then run `preflight` again until it says `Ready for the next step`. Fix every `WARNING` line before you continue (each one prints a `Fix:` line with what to do), because that message is printed even when warnings remain. See [step 1 of DEPLOYMENT.md](DEPLOYMENT.md#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
 2. Place your WireGuard profile at the default path, mode `0600`, in the [restricted format](#wireguard-profile-format). Provider-generated files often fail the restricted parser (IPv4 `/32` address only, a numeric IPv4 endpoint, one numeric DNS server), so edit yours to match first. `setup` rejects anything else at its profile check, step 4 of 6, before any download, and names the field, not the value. If you skip this step, `setup` creates the directories, tells you where the file goes and stops. Run it again after you place the file.
 3. `setup` checks the profile, downloads and verifies Debian and Tor Browser (it shows exact versions and URLs and asks `Continue? [y/N]`), then builds the base. Each step is skipped when it's already done, so it's safe to run again.
 4. `launch` starts the newest base. Pick an entry in the chooser and keep the terminal open. Close the browser to end the session. The VMs stop and the session's RAM files are removed.
@@ -278,7 +278,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (515 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (517 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. A bookmark made in one session was absent from the next. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |

@@ -35,7 +35,7 @@ bash mayfly.sh launch --core-policy
 
 You don't create anything by hand. `setup` creates the state directory and its subdirectories, and you only supply the profile.
 
-- `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision. Fix every `WARNING` line before you continue, because that message is printed even when warnings remain. See [step 1](#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
+- `preflight` changes nothing. Run the install command it prints, then run it again until it says `Ready for the next step`. On Fedora Atomic systems such as Bazzite that means a reboot, which is your decision. Fix every `WARNING` line before you continue (each one prints a `Fix:` line with what to do), because that message is printed even when warnings remain. See [step 1](#1-check-the-host-and-install-packages) for the Ubuntu kernel-image fix (`sudo chmod 0644 /boot/vmlinuz-*`) and the `/dev/kvm` group fix.
 - The state directory is `$MAYFLY_HOME`, else `$XDG_STATE_HOME/mayfly`, else `~/.local/state/mayfly`. It and its subdirectories (`pins`, `bases`, `secrets`, `downloads`) must be yours with mode `0700`. If one already exists with the wrong owner or mode, or is a symlink, Mayfly refuses it instead of repairing it. Without the profile, `setup` prints where the file goes and exits `0`, and it never reads or prints the profile at that point.
 - `setup` runs, in order: preflight, state directories, profile check, `fetch-pins`, `build`. It skips each finished step with an `already done` line, so running it again is safe. `fetch-pins` shows the exact Debian and Tor Browser versions and URLs and asks `Continue? [y/N]`. Add `--yes` to accept without the prompt. Versions are chosen automatically from upstream, so compare them with the official [Debian](https://cloud.debian.org/images/cloud/trixie/) and [Tor Browser](https://www.torproject.org/download/) pages if you need to guard against a downgrade. `--yes` skips that review.
 - Debian publishes no detached signature for its cloud images. The Debian download is trusted on HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified with `gpgv` against Tor's pinned signing key, fingerprint `EF6E286DDA85EA2A4BA7DE684E2C6E8793298290`. The pins file is written, mode `0600`, only if every check passes.
@@ -95,7 +95,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `515 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `517 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
