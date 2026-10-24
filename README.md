@@ -94,7 +94,7 @@ Specifically:
 - **Browser fingerprinting and account correlation.** Firefox over a VPN is not Tor anonymity, and Mayfly doesn't make Firefox fingerprint-resistant. Accounts, fingerprinting and correlation can still identify your activity. See [Tor Browser's fingerprinting protections](https://support.torproject.org/tor-browser/features/fingerprinting-protections/) and their limits.
 - **Your VPN provider.** The provider sees that you connect and where your traffic goes. Tor Browser over a VPN adds another party and configuration dependency, not a proven anonymity improvement. Read the [Tor Project's VPN guidance](https://support.torproject.org/tor-browser/general/vpn-with-tor/) first.
 - **Code that takes over the browser.** The I2P entry's "no ordinary websites" rule is a browser property, not a network one. Code that controls the browser can still reach the internet through the tunnel, as in the other two entries.
-- **Encrypted DNS chosen by an application.** The gateway filter restricts classic TCP/UDP port 53 DNS. It doesn't pin every encrypted DNS protocol to the profile's resolver. The Firefox entry blocks DNS over HTTPS by policy, but that policy isn't confirmed in a running session.
+- **Encrypted DNS chosen by an application.** The gateway filter restricts classic TCP/UDP port 53 DNS. It doesn't pin every encrypted DNS protocol to the profile's resolver. The Firefox entry blocks DNS over HTTPS by policy. `about:policies` lists that policy as active, but the blocking itself hasn't been tested.
 - **Memory pressure and storage exhaustion.** The host may stop a VM or the launcher under memory pressure, and overlay exhaustion can end a VM. Neither case has a disk fallback or a guarantee that a session completes.
 - **Hibernation, swap and crash dumps.** Session memory can reach disk if your host writes RAM out. The risks are disk swap, hibernation, VM save-state, and crash dumps by a system collector such as `systemd-coredump` or `apport`. The launcher refuses to start on a host that has disk swap, a configured resume device, a loaded crash kernel or a piped core handler. That is a check at launch only. Mayfly can't stop you from changing the setting after the session starts, for example by restoring the core-dump policy or hibernating while a session is open. Anything written that way can hold what you browsed, the WireGuard key or guest memory, and Mayfly can't clean it up. Restore the core-dump policy only after every session has ended. See [Core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy).
 - **Stale software.** Nothing updates inside a session, and base images age. The launcher warns when a base is older than 35 days (`MAYFLY_MAX_BASE_AGE_DAYS` changes the limit). Rebuild bases regularly.
@@ -204,6 +204,20 @@ bash mayfly.sh launch --core-policy
 3. `setup` checks the profile, downloads and verifies Debian and Tor Browser (it shows exact versions and URLs and asks `Continue? [y/N]`), then builds the base. Each step is skipped when it's already done, so it's safe to run again.
 4. `launch` starts the newest base. Pick an entry in the chooser and keep the terminal open. Close the browser to end the session. The VMs stop and the session's RAM files are removed.
 
+A profile in the accepted shape looks like this. The values are placeholders:
+
+```ini
+[Interface]
+PrivateKey = <your private key>
+Address = 10.0.0.2/32
+DNS = 10.0.0.1
+
+[Peer]
+PublicKey = <the server's public key>
+AllowedIPs = 0.0.0.0/0
+Endpoint = 203.0.113.5:51820
+```
+
 `--core-policy` is only needed when your host pipes core dumps to a collector such as `apport` or `systemd-coredump`, or has `fs.suid_dumpable` other than `0`. When the host already satisfies the requirement, it changes nothing. Otherwise it runs `sudo sysctl` to set `kernel.core_pattern=/dev/null` and `fs.suid_dumpable=0` for the whole host, and undoes that on exit only if it applied the change and no QEMU process is running. Before you launch, close other work and don't hibernate. See [Core-dump policy](DEPLOYMENT.md#9-temporary-core-dump-policy).
 
 Run mode 1 (dedicated user) has more steps than mode 2, in this order:
@@ -211,7 +225,7 @@ Run mode 1 (dedicated user) has more steps than mode 2, in this order:
 1. Run `bash mayfly.sh preflight` and install the packages it prints, as above.
 2. Place your WireGuard profile at `~/.local/state/mayfly/secrets/wireguard.conf` with mode `0600`, as in step 2 above, before you run the installer. The installer imports it for the `mayfly` user, and `sudo mayfly setup` stops with "the WireGuard profile is missing" without it.
 3. Read `host/install-host.sh`, then run `sudo bash host/install-host.sh`.
-4. Run `sudo mayfly setup`, then `sudo mayfly launch --core-policy`.
+4. Run `sudo mayfly setup`, then `sudo mayfly launch --core-policy`. If `sudo` can't find `mayfly`, use `/usr/local/sbin/mayfly`.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 
@@ -228,7 +242,7 @@ bash mayfly.sh launch [--core-policy] [NAME]
 bash mayfly.sh core-policy apply|restore|status
 ```
 
-- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA513SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. Versions are chosen automatically from upstream, so compare them with the official Debian and Tor Browser pages if you need to guard against a downgrade. `--yes` skips this review. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
+- `fetch-pins` finds the newest Debian trixie generic cloud image and the latest stable Tor Browser version, shows them, asks for confirmation, and writes the pins file only if every check passes. Debian publishes no detached signature, so trust in the image is HTTPS plus Debian's published `SHA512SUMS`. Tor Browser is verified against Tor's pinned signing key. Pass `--debian` and `--tor` to choose versions yourself. Versions are chosen automatically from upstream, so compare them with the official Debian and Tor Browser pages if you need to guard against a downgrade. `--yes` skips this review. [DEPLOYMENT.md](DEPLOYMENT.md#2-get-and-verify-downloads) lists the equivalent manual steps.
 - `build` names the base `base-YYYYMMDD` unless you give a name, and never overwrites an existing base.
 - The absolute-path forms still work and are what the dedicated-user wrapper uses: `build ABS-PINS ABS-NEW-BASE` and `launch ABS-BASE ABS-PROFILE [RAM-PARENT]`.
 - [DEPLOYMENT.md](DEPLOYMENT.md#manual-and-advanced-steps) has the manual steps, host diagnostics, the leak test and troubleshooting.
@@ -237,7 +251,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (513 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (515 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. A bookmark made in one session was absent from the next. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |
@@ -326,7 +340,7 @@ The pins file is literal `key=value` data, not shell. Supply each field once.
 
 The parser accepts only these four fields, blank lines and full-line comments. Quotes, shell variables and command substitutions aren't expanded. Mayfly ships no sample hashes. The fixture in `tests/fixtures/synthetic.pins` is deliberately unusable.
 
-Build checks both SHA-256 pins. It also fetches the matching Tor signature and signing key and verifies them with `gpgv` against the pinned primary fingerprint. It doesn't verify a Debian signature, because Debian's cloud image directory publishes `SHA513SUMS` without a detached signature. See [Get and verify downloads](DEPLOYMENT.md#2-get-and-verify-downloads).
+Build checks both SHA-256 pins. It also fetches the matching Tor signature and signing key and verifies them with `gpgv` against the pinned primary fingerprint. It doesn't verify a Debian signature, because Debian's cloud image directory publishes `SHA512SUMS` without a detached signature. See [Get and verify downloads](DEPLOYMENT.md#2-get-and-verify-downloads).
 
 A successful build produces `gateway.qcow2` and `browser.qcow2`, each with a 16 GiB virtual size, mode `0444` and a `.sha256` companion file. Guest package versions from Debian repositories aren't pinned, so builds are not reproducible.
 

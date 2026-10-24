@@ -306,3 +306,8 @@ fi
 check 'ancestry: only uid 0 or the overflow uid can be root-like, never an ordinary uid' bash -c '
     source "$1/lib/policy.sh"
     mf_root_owner 0 && ! mf_root_owner 1234' _ "$project"
+
+check 'docs: every checksum tool named in the guides exists on this host' \
+    bash -c 'for t in $(grep -ohE "sha[0-9]+sum" "$1/README.md" "$1/DEPLOYMENT.md" | sort -u); do command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; done' _ "$project"
+check 'docs: checksum file names are real (SHA512SUMS, never a mangled number)' \
+    bash -c '! grep -ohE "SHA[0-9]+SUMS" "$1/README.md" "$1/DEPLOYMENT.md" | grep -vqx "SHA512SUMS"' _ "$project"
