@@ -25,7 +25,7 @@ bash mayfly.sh preflight
 bash mayfly.sh setup --core-policy
 ```
 
-The first `setup` run creates the state directory and stops because the profile is missing. It prints the path where the file goes. Place the profile there, then run `setup` again:
+The first `setup` run creates the state directory and stops because the WireGuard profile (the configuration file from your VPN provider) is missing. It prints the path where the file goes. Place your WireGuard profile there, then run `setup` again:
 
 ```bash
 install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
