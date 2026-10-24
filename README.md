@@ -219,10 +219,20 @@ You need a WireGuard profile from a VPN provider before you start. Mayfly isn't 
 This is the shortest path for run mode 2 (your own user, native host). Mayfly keeps everything it needs in `~/.local/state/mayfly` (or `$MAYFLY_HOME`, or `$XDG_STATE_HOME/mayfly`) and creates the subdirectories itself.
 
 ```bash
+# Download Mayfly and enter its folder. If you don't have git, download the ZIP from GitHub instead.
 git clone https://github.com/stschulznz/mayfly.git && cd mayfly
+
+# Check your system. It changes nothing and prints the install command for anything missing.
 bash mayfly.sh preflight
+
+# Make a private folder for the profile, then copy your WireGuard file into it
+# with owner-only permissions (600). Replace /path/to/provider.conf with your file.
 (umask 077; mkdir -p ~/.local/state/mayfly/secrets) && install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+
+# Download and verify Debian and Tor Browser, then build the base images (this takes several minutes).
 bash mayfly.sh setup --core-policy
+
+# Start a session and pick Firefox, Tor Browser or I2P in the chooser.
 bash mayfly.sh launch --core-policy
 ```
 

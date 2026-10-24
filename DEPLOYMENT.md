@@ -16,20 +16,39 @@ You need:
 
 Choose a run mode. Mode 2 is simpler. Mode 1 is stronger, because the VMs run as a separate user. See [Run modes](README.md#run-modes).
 
+### Get Mayfly
+
+Download the project and enter its folder. If you don't have `git`, download the ZIP from the GitHub page and unpack it instead. Run every command below from this folder:
+
+```bash
+# Download Mayfly and enter its folder.
+git clone https://github.com/stschulznz/mayfly.git
+cd mayfly
+```
+
 ### Run mode 2: same user
 
 Run these as your normal user:
 
 ```bash
+# Check your system. It changes nothing and prints the install command for anything missing.
 bash mayfly.sh preflight
+
+# Create the state directory, then stop because the WireGuard profile isn't there yet.
 bash mayfly.sh setup --core-policy
 ```
 
 The first `setup` run creates the state directory and stops because the WireGuard profile (the configuration file from your VPN provider) is missing. It prints the path where the file goes. Place your WireGuard profile there, then run `setup` again:
 
 ```bash
+# Copy your WireGuard file into place with owner-only permissions (600).
+# Replace /path/to/provider.conf with the file you downloaded, then delete the original.
 install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+
+# Download and verify Debian and Tor Browser, then build the base images (this takes several minutes).
 bash mayfly.sh setup --core-policy
+
+# Start a session and pick Firefox, Tor Browser or I2P in the chooser.
 bash mayfly.sh launch --core-policy
 ```
 
@@ -47,11 +66,20 @@ You don't create anything by hand. `setup` creates the state directory and its s
 Mode 1 needs the packages from `preflight`, and the profile at the same default path as mode 2, before the installer runs. The installer is what creates the `mayfly` user and `/var/lib/mayfly`. `sudo mayfly setup` doesn't create them.
 
 ```bash
+# Check your system and install the packages it prints.
 bash mayfly.sh preflight
+
+# Make a private folder and copy your WireGuard file into it with owner-only permissions (600).
 (umask 077; mkdir -p ~/.local/state/mayfly/secrets)
 install -m 600 /path/to/provider.conf ~/.local/state/mayfly/secrets/wireguard.conf
+
+# One-time root install: creates the mayfly user and /var/lib/mayfly, and copies the profile in.
 sudo bash host/install-host.sh
+
+# Download and verify Debian and Tor Browser, then build the base images as the mayfly user.
 sudo mayfly setup
+
+# Start a session. --core-policy sets the crash-dump policy for the session and restores it after.
 sudo mayfly launch --core-policy
 ```
 
