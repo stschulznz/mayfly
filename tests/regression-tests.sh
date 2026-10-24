@@ -311,3 +311,9 @@ check 'docs: every checksum tool named in the guides exists on this host' \
     bash -c 'for t in $(grep -ohE "sha[0-9]+sum" "$1/README.md" "$1/DEPLOYMENT.md" | sort -u); do command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; done' _ "$project"
 check 'docs: checksum file names are real (SHA512SUMS, never a mangled number)' \
     bash -c '! grep -ohE "SHA[0-9]+SUMS" "$1/README.md" "$1/DEPLOYMENT.md" | grep -vqx "SHA512SUMS"' _ "$project"
+
+check 'docs: the WireGuard profile template in the README passes the profile parser' \
+    bash -c 'source "$1/lib/policy.sh"
+        sed -n "/^# Your side of the tunnel/,/^Endpoint = /p" "$1/README.md" |
+            sed "s|<your private key>|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=|; s|<the server.s public key>|AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=|; s|203.0.113.5|1.1.1.1|" |
+            mf_parse_profile' _ "$project"

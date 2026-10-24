@@ -252,14 +252,21 @@ bash mayfly.sh launch --core-policy
 A profile in the accepted shape looks like this. The values are placeholders:
 
 ```ini
+# Your side of the tunnel.
 [Interface]
+# The secret key for this device. Keep it private.
 PrivateKey = <your private key>
+# Your address inside the VPN, as a single IPv4 address with /32.
 Address = 10.0.0.2/32
+# The VPN's DNS server, as a numeric IPv4 address.
 DNS = 10.0.0.1
 
+# The VPN server.
 [Peer]
 PublicKey = <the server's public key>
+# Send all traffic through the tunnel.
 AllowedIPs = 0.0.0.0/0
+# The server's numeric IPv4 address and port. Use your provider's real one; this example address is for documentation only.
 Endpoint = 203.0.113.5:51820
 ```
 
@@ -279,11 +286,22 @@ See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 `setup` runs these commands in order. Run each one yourself if you want to:
 
 ```bash
+# Check that your WireGuard profile is in the accepted format. It never prints the file.
 bash mayfly.sh check-profile [--core-policy] [ABSOLUTE-PROFILE-FILE]
+
+# Find the newest Debian image and Tor Browser, verify them, and write the pins file.
 bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]
+
+# Build the base images from the pins file into a new, named base.
 bash mayfly.sh build [PINS-FILE] [NAME]
+
+# Check the host (memory, swap, crash dumps) without starting anything.
 bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY
+
+# Start a session from the newest base, or from the named one.
 bash mayfly.sh launch [--core-policy] [NAME]
+
+# Set, undo, or show the temporary crash-dump policy. It changes a host-wide setting.
 bash mayfly.sh core-policy apply|restore|status
 ```
 
@@ -296,7 +314,7 @@ bash mayfly.sh core-policy apply|restore|status
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (517 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (518 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. A bookmark made in one session was absent from the next. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |
@@ -330,14 +348,31 @@ WSL2 support is planned. It isn't available yet.
 ### Commands
 
 ```text
+# Check the host and print the install command for anything missing. Changes nothing.
 bash mayfly.sh preflight
+
+# Run the whole first-time setup: profile check, downloads, and base build.
 bash mayfly.sh setup [--core-policy] [--yes]
+
+# Download and verify Debian and Tor Browser, and write the pins file.
 bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]
+
+# Build the base images. NAME is a short name in the state directory.
 bash mayfly.sh build [PINS-FILE] [NAME | NEW-BASE-DIRECTORY]
+
+# Start a session from the newest base, or from the named one.
 bash mayfly.sh launch [--core-policy] [NAME]
+
+# Check a WireGuard profile without printing it. The default is the profile in the state directory.
 bash mayfly.sh check-profile [--core-policy] [PROFILE-FILE]
+
+# Apply, restore, or show the temporary crash-dump policy.
 bash mayfly.sh core-policy apply|restore|status
+
+# Check the host's memory, swap and crash-dump settings. Takes an absolute path in RAM, such as /dev/shm.
 bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY
+
+# The same build and launch with full paths. The dedicated-user wrapper uses these forms.
 bash mayfly.sh build ABSOLUTE-PINS-FILE NEW-BASE-DIRECTORY
 bash mayfly.sh launch BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]
 ```
