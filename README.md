@@ -317,10 +317,11 @@ bash mayfly.sh core-policy apply|restore|status
 
 ```bash
 # Start a session and attach one text file. Run it in mode 2.
+# Add --core-policy if your host needs it, as in the Quick start.
 bash mayfly.sh launch --attach post.txt
 
 # The same in the dedicated-user mode (mode 1).
-sudo mayfly launch --attach post.txt
+sudo mayfly launch --core-policy --attach post.txt
 
 # Then, inside the VM, open this address in the browser, select the text and copy it there:
 # file:///mnt/transfer/post.txt

@@ -299,12 +299,13 @@ To read a long text in the guest without a clipboard bridge, attach it at launch
 
 ```bash
 # Attach one text file. A relative path is resolved against your current directory.
+# Add --core-policy if your host needs it, as in the Quick start.
 bash mayfly.sh launch --attach post.txt
 ```
 
 Inside the VM, open `file:///mnt/transfer/post.txt` in the browser and copy the text from there. Mayfly validates the file on the open descriptor (a regular file that you own, not a symlink, 1 byte to 1 MiB, no NUL bytes), reads it once, and builds a read-only ISO9660 disk with the label `transfer` in the session's RAM directory. Only the browser VM receives it, as a read-only CD-ROM. The guest mounts it by label at `/mnt/transfer` with `ro,nosuid,nodev,noexec,nofail` through an automount, so boot never waits for it, and without `--attach` the directory is simply empty. Nothing goes back from the guest. The ISO and the copy are removed with the session.
 
-- Mode 1: `sudo mayfly launch --attach post.txt`. The root wrapper opens the file as root but requires that it belongs to the user who ran `sudo`, validates the open descriptor, and writes a root-owned `0640` copy into its private `/run/mayfly` mount. The `mayfly` user's launcher accepts only that exact wrapper path and never a path you give it. Relative paths resolve against the directory you ran `sudo` from.
+- Mode 1: `sudo mayfly launch --core-policy --attach post.txt`. The root wrapper opens the file as root but requires that it belongs to the user who ran `sudo`, validates the open descriptor, and writes a root-owned `0640` copy into its private `/run/mayfly` mount. The `mayfly` user's launcher accepts only that exact wrapper path and never a path you give it. Relative paths resolve against the directory you ran `sudo` from.
 - The guest file name is the host file name if it uses only letters, digits, `.`, `_` and `-` (at most 64 characters, not starting with `-` or `.`), otherwise `transfer.txt`.
 - Limits: one file, up to 1 MiB of text. The guest can read only that file, and anything open in the guest browser can read it, so attach nothing you wouldn't disclose to the session. Your own host files are never exposed beyond the one you name.
 - Requires a base built from a version of Mayfly that has the mount setup. Rebuild the base first (step 11).
