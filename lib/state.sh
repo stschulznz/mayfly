@@ -175,10 +175,23 @@ mf_setup() {
     if [[ -n $base ]]; then
         printf 'already done: base %s\n' "$base"
     else
-        name=base-$(date +%Y%m%d)
+        name=$(mf_next_base_name "$state/bases") || mf_die 'no free default base name; pass a name' 73
         mf_build "$pins" "$state/bases/$name" "$project" "$root"
     fi
     printf '%s\n' 'Setup finished. Next: mayfly launch'
+}
+
+# mf_next_base_name BASES-DIR: print base-YYYYMMDD, or base-YYYYMMDD-2, -3 ... if taken.
+mf_next_base_name() {
+    local dir=$1 base name i=2
+    base=base-$(date +%Y%m%d)
+    name=$base
+    while [[ -e $dir/$name || -L $dir/$name ]]; do
+        name=$base-$i
+        i=$((i + 1))
+        (( i <= 99 )) || return 1
+    done
+    printf '%s\n' "$name"
 }
 
 # Split "--core-policy" from other words. Sets MF_CORE_FLAG and MF_ARGS.
@@ -260,7 +273,7 @@ mf_cmd_build() {
     [[ -n $pins ]] || pins=$(mf_state_pins_file "$state")
     [[ -e $pins ]] || mf_die "no pins file at $pins; run: mayfly fetch-pins" 66
     if [[ -z $out ]]; then
-        [[ -n $name ]] || name=base-$(date +%Y%m%d)
+        [[ -n $name ]] || name=$(mf_next_base_name "$state/bases") || mf_die 'no free default base name; pass a name' 73
         out=$state/bases/$name
         [[ ! -e $out && ! -L $out ]] ||
             mf_die "base $name already exists and builds never overwrite; pick a name: mayfly build ${name}-2" 73

@@ -123,7 +123,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `560 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `562 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -541,7 +541,7 @@ sudo mayfly build base-01
 sudo mayfly launch --core-policy base-01
 ```
 
-`build` with no name creates `base-YYYYMMDD`, and `launch` with no name uses the newest base. The build runs as the `mayfly` user and can take several minutes. `launch` needs exactly one Wayland socket in your session. If it can't pick one, list `wayland-*` in `$XDG_RUNTIME_DIR` and pass the name, for example `sudo mayfly launch --display wayland-1 base-01`. Add `--diag` for the diagnostics in step 8, which are then readable only by `mayfly` and root:
+`build` with no name creates `base-YYYYMMDD` (or `base-YYYYMMDD-2` and so on if that name is taken), and `launch` with no name uses the newest base. The build runs as the `mayfly` user and can take several minutes. `launch` needs exactly one Wayland socket in your session. If it can't pick one, list `wayland-*` in `$XDG_RUNTIME_DIR` and pass the name, for example `sudo mayfly launch --display wayland-1 base-01`. Add `--diag` for the diagnostics in step 8, which are then readable only by `mayfly` and root:
 
 ```bash
 sudo bash -c 'cat /dev/shm/mayfly.*/browser-diag.log | cat -v'

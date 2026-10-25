@@ -230,7 +230,16 @@ mf_cmd_fetch_pins() {
 
 mf_cmd_build() {
     local name=${1:-}
-    [[ -n $name ]] || name=base-$(date +%Y%m%d)
+    if [[ -z $name ]]; then
+        # Default name: base-YYYYMMDD, then -2, -3 if that day's name is taken.
+        local base=base-$(date +%Y%m%d) i=2
+        name=$base
+        while [[ -e $MF_STATE/bases/$name || -L $MF_STATE/bases/$name ]]; do
+            name=$base-$i
+            i=$((i + 1))
+            (( i <= 99 )) || mf_die 'no free default base name; pass a name' 73
+        done
+    fi
     mf_valid_name "$name" || mf_die 'a valid new base name is required' 64
     mf_check_install
     [[ -f $MF_STATE/pins/build.pins ]] || mf_die 'no pins file; run: sudo mayfly fetch-pins'

@@ -33,7 +33,7 @@ usage() {
         '       bash mayfly.sh launch [--attach FILE] [--core-policy] BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]' \
         'Defaults live in the state directory: MAYFLY_HOME, else $XDG_STATE_HOME/mayfly,' \
         'else ~/.local/state/mayfly (pins/build.pins, secrets/wireguard.conf, bases/NAME).' \
-        'launch uses the newest base. build names a new base base-YYYYMMDD and never overwrites.' \
+        'launch uses the newest base. build names a new base base-YYYYMMDD (-2, -3 if taken) and never overwrites.' \
         'PINS-FILE, BASE-DIRECTORY and PROFILE-FILE given in full must be absolute paths.' \
         '--core-policy applies the host core-dump policy if needed (uses sudo, host-wide) and' \
         'restores it on exit only when this command applied it and no QEMU process runs.' \

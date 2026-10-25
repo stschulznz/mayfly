@@ -568,9 +568,10 @@ check 'build: NAME, PINS and PINS NAME resolve inside the state directory' \
 check 'build: the absolute long form is unchanged' \
     mf_st "$mf_st_cmds"'printf x > "$S/pins/build.pins"; run mf_cmd_build "$S/pins/build.pins" /abs/new-base
         [[ $(< "$d/build.log") == "build $S/pins/build.pins /abs/new-base $project $root" ]]'
-check 'build: refuses to overwrite an existing base, a missing pins file and bad words' \
+check 'build: takes the next free default name, refuses an existing explicit name, a missing pins file and bad words' \
     mf_st "$mf_st_cmds"'printf x > "$S/pins/build.pins"; mk "base-$(date +%Y%m%d)" 2024-01-01
-        run mf_cmd_build; [[ $rc == 73 && ! -e $d/build.log ]]; grep -q "never overwrite" "$d/out"
+        run mf_cmd_build; [[ $rc == 0 ]]; grep -q "bases/base-$(date +%Y%m%d)-2" "$d/build.log"
+        rm -f "$d/build.log"; run mf_cmd_build "base-$(date +%Y%m%d)"; [[ $rc == 73 && ! -e $d/build.log ]]; grep -q "never overwrite" "$d/out"
         run mf_cmd_build mine2; [[ $rc == 0 ]]; rm -f "$S/pins/build.pins"; rm -f "$d/build.log"; run mf_cmd_build mine3; [[ $rc == 66 && ! -e $d/build.log ]]
         printf x > "$S/pins/build.pins"; for a in "--unsafe" "../x" "a b" "/p a b" "/a /b /c"; do run mf_cmd_build $a; [[ $rc == 64 && ! -e $d/build.log ]]; rm -f "$d/build.log"; done'
 check 'check-profile: default path, explicit absolute path, relative path refused, flag applies policy' \
@@ -629,7 +630,8 @@ check 'wrapper: fetch-pins runs as the service user with a fixed state home and 
 check 'wrapper: build without a name creates base-YYYYMMDD from the installed pins and never overwrites' \
     mf_sub "$mf_wst_cmds"'mkdir -p "$d/pins"; : > "$d/pins/build.pins"
         mf_cmd_build ""; [[ $(< "$d/ra") == "LIBGUESTFS_BACKEND=direct bash /usr/local/lib/mayfly/mayfly.sh build $d/pins/build.pins $d/bases/base-$day" ]]
-        mk "base-$day"; rc=0; ( mf_cmd_build "" ) >/dev/null 2>&1 || rc=$?; [[ $rc != 0 ]]
+        mk "base-$day"; rm -f "$d/ra"; mf_cmd_build ""; [[ $(< "$d/ra") == *"$d/bases/base-$day-2" ]]
+        rc=0; ( mf_cmd_build "base-$day" ) >/dev/null 2>&1 || rc=$?; [[ $rc != 0 ]]
         rc=0; ( mf_cmd_build "../x" ) >/dev/null 2>&1 || rc=$?; [[ $rc == 64 ]]'
 check 'wrapper: setup fetches pins and builds only what is missing' \
     mf_sub "$mf_wst_cmds"'mkdir -p "$d/secrets"; : > "$d/secrets/wireguard.conf"
@@ -745,3 +747,17 @@ check 'docs: the manual restore block applies a plain relative name or /dev/null
         blk /dev/null 0; [[ $rc == 0 ]]; grep -qF "sysctl -w kernel.core_pattern=/dev/null fs.suid_dumpable=0" "$d/sysctl.log"
         neg grep -q "sysctl -p" "$d/sysctl.log"'
 
+
+check 'crash-dump refusal tells the user to add --core-policy' \
+    bash -c 'source "$1/lib/policy.sh"; source "$1/lib/host.sh"
+        MF_HOST[core_pattern]="|/usr/lib/systemd/systemd-coredump %P"; MF_HOST[core_soft]=0; MF_HOST[core_hard]=0; MF_HOST[suid_dumpable]=2
+        out=$(mf_check_host_snapshot 2>&1) && exit 1
+        [[ $out == *"--core-policy"* && $out == *"mayfly core-policy apply"* ]]' _ "$project"
+
+check 'default base name: today, then -2, -3 when taken, never an existing name' \
+    bash -c 'source "$1/lib/policy.sh"; source "$1/lib/state.sh"
+        d=$(mktemp -d); trap "rm -rf -- $d" EXIT; t=base-$(date +%Y%m%d)
+        [[ $(mf_next_base_name "$d") == "$t" ]]
+        mkdir "$d/$t"; [[ $(mf_next_base_name "$d") == "$t-2" ]]
+        mkdir "$d/$t-2"; [[ $(mf_next_base_name "$d") == "$t-3" ]]
+        ln -s x "$d/$t-3"; [[ $(mf_next_base_name "$d") == "$t-4" ]]' _ "$project"

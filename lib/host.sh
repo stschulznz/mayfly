@@ -22,7 +22,7 @@ mf_profile_dump_guard() {
     pattern=$(mf_read_state /proc/sys/kernel/core_pattern)
     [[ -n $pattern && $pattern != unknown && $pattern != \|* &&
        $(ulimit -S -c) == 0 && $(ulimit -H -c) == 0 ]] ||
-        { mf_error 'profile parsing requires zero core limits and a non-piped core pattern; no proven shell-only process nondumpability mechanism'; return 1; }
+        { mf_error 'crash dumps are not turned off, and a crash could write your VPN key to disk. Add --core-policy to the same command (it sets the policy for the session and restores it afterwards), or run: mayfly core-policy apply'; return 1; }
 }
 
 mf_host_snapshot() {
@@ -128,7 +128,7 @@ mf_check_host_snapshot() {
           ${MF_HOST[core_pattern]:-} == unknown ||
           ${MF_HOST[core_pattern]:-} == \|* ||
           ${MF_HOST[suid_dumpable]:-} != 0 ]]; then
-        mf_error 'require zero core limits and suid_dumpable=0; piped collector refused: shell-only launcher cannot establish QEMU process nondumpability (RLIMIT_CORE does not constrain pipes)' || :
+        mf_error 'crash dumps are not turned off, and a crash could write session memory or your VPN key to disk. Add --core-policy to the same launch or check-profile command (it sets the policy for the session and restores it afterwards), or run: mayfly core-policy apply' || :
         failed=1
     fi
     if [[ ${MF_HOST[kvm]:-} != yes ]]; then
