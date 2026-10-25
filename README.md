@@ -55,6 +55,18 @@ What this doesn't mean, and why the claim "no trace" is not safe to make:
 - It protects the visit from your computer's records, not from someone who controls the computer while the session runs.
 - Leak-proofing is by design. A packet-counter test of all three entries found nothing leaving outside the tunnel, but a test can't prove that no leak path exists. See [Tested](#tested).
 
+### Researching risky sites
+
+Mayfly is also built for security research on parts of the internet you wouldn't open on your everyday system, such as dark web and I2P sites. Every page runs in a throwaway VM, not on your host. That limits the damage a hostile page can do:
+
+- **An exploit has to get out of the VM.** A browser exploit lands inside the VM first. To reach your computer it would also need a way out of the VM.
+- **Nothing crosses back by default.** There are no shared folders, no shared clipboard and no download export. Files you open or download in a session stay in the session. The `--attach` option only goes from your host into the VM.
+- **The VM can't reach your home network.** The browser VM has one connection, to the gateway VM, and the gateway lets out only the WireGuard tunnel. In the packet counter test, every packet the VMs sent went to the VPN endpoint, so none went to other devices on your network.
+- **Nothing persists.** The base image is read-only and the session overlay is in RAM, so malware that lands in a session is gone when it ends.
+- **A separate user in run mode 1.** The VMs run as the `mayfly` user, not as you.
+
+This lowers the risk. It doesn't remove it. A flaw in QEMU, KVM or the kernel could let code escape a VM, so keep those updated. In run modes 2 and 3 an escape would run as you. Don't open files from a session on your host, and only visit content that is legal where you are. See [What Mayfly does not protect against](#what-mayfly-does-not-protect-against).
+
 ## How it works
 
 Mayfly runs native QEMU as a user process, not through libvirt:
@@ -99,6 +111,7 @@ RAM-only session storage is not a zero-traces or physical memory-wipe promise. T
 Specifically:
 
 - **A compromised host or hypervisor.** Anything that controls your host controls the VMs.
+- **A VM escape.** A flaw in QEMU, KVM or the host kernel could let code in a VM reach your host. In run mode 1 it would run as the `mayfly` user, and in modes 2 and 3 as you. Keep QEMU and your kernel updated.
 - **Your own user account, in run modes 2 and 3.** Software that runs as your user can read the VMs' memory. Only mode 1 closes this gap, and even then your `sudo` password stays a way in, because your account remains an administrator.
 - **Browser fingerprinting and account correlation.** Firefox over a VPN is not Tor anonymity, and Mayfly doesn't make Firefox fingerprint-resistant. Accounts, fingerprinting and correlation can still identify your activity. See [Tor Browser's fingerprinting protections](https://support.torproject.org/tor-browser/features/fingerprinting-protections/) and their limits.
 - **Your VPN provider.** The provider sees that you connect and where your traffic goes. Tor Browser over a VPN adds another party and configuration dependency, not a proven anonymity improvement. Read the [Tor Project's VPN guidance](https://support.torproject.org/tor-browser/general/vpn-with-tor/) first.
