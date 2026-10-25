@@ -334,6 +334,21 @@ sudo mayfly launch --core-policy --attach post.txt
 - An ISO tool (`genisoimage`, `mkisofs` or `xorriso`) is required, as for every launch.
 - It has been tested live in run mode 1 in the Firefox entry. See [Tested](#tested).
 
+**Keep the file off your disk.** Deleting a file doesn't reliably erase it from a modern disk. On SSDs and on copy-on-write filesystems such as btrfs, the old data can stay where it was, and tools such as `shred` don't help there. Full-disk encryption is your main protection. To avoid the problem, write the file in RAM, in `/dev/shm`, so it never reaches the disk:
+
+```bash
+# Make a private folder in RAM, then write your text there. Pick an editor that doesn't save backup files.
+mkdir -m 700 /dev/shm/post && nano /dev/shm/post/post.txt
+
+# Launch with the file attached. Add --core-policy if your host needs it.
+sudo mayfly launch --core-policy --attach /dev/shm/post/post.txt
+
+# Delete it when you're done. RAM files also vanish when the computer restarts.
+rm -r /dev/shm/post
+```
+
+The file only has to be a regular file that you own, so a file in `/dev/shm` works. Check that your editor keeps no backup, swap or recent-file copies elsewhere.
+
 ## Tested
 
 | What | Result |

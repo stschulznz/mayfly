@@ -309,6 +309,18 @@ Inside the VM, open `file:///mnt/transfer/post.txt` in the browser and copy the 
 - The guest file name is the host file name if it uses only letters, digits, `.`, `_` and `-` (at most 64 characters, not starting with `-` or `.`), otherwise `transfer.txt`.
 - Limits: one file, up to 1 MiB of text. The guest can read only that file, and anything open in the guest browser can read it, so attach nothing you wouldn't disclose to the session. Your own host files are never exposed beyond the one you name.
 - Requires a base built from a version of Mayfly that has the mount setup. Rebuild the base first (step 11).
+- To keep the file off your disk, write it in RAM and attach it from there. Deleting a file doesn't reliably erase it on an SSD or a copy-on-write filesystem such as btrfs, and `shred` doesn't help there:
+
+  ```bash
+  # Make a private folder in RAM, then write your text there. Use an editor that doesn't save backup files.
+  mkdir -m 700 /dev/shm/post && nano /dev/shm/post/post.txt
+
+  # Launch with the file attached. Add --core-policy if your host needs it.
+  sudo mayfly launch --core-policy --attach /dev/shm/post/post.txt
+
+  # Delete it when you're done. RAM files also vanish when the computer restarts.
+  rm -r /dev/shm/post
+  ```
 - This feature hasn't been tested live. See [Tested](README.md#tested).
 
 ## 7. End sessions
