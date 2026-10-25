@@ -332,7 +332,7 @@ sudo mayfly launch --core-policy --attach post.txt
 - The name in the VM is the file's name when it uses only letters, digits, `.`, `_` and `-`, is at most 64 characters, and doesn't start with `-` or `.`. Otherwise it's `transfer.txt`.
 - The guest image carries the mount setup, so you need a base built from this version of Mayfly. Build a new base before you use `--attach`.
 - An ISO tool (`genisoimage`, `mkisofs` or `xorriso`) is required, as for every launch.
-- This hasn't been tested live yet. See [Tested](#tested).
+- It has been tested live in run mode 1 in the Firefox entry. See [Tested](#tested).
 
 ## Tested
 
@@ -347,7 +347,7 @@ sudo mayfly launch --core-policy --attach post.txt
 | RAM-only writes (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
 | Leak test, all three entries (run mode 1) | Per-user packet counters on that host. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
 | Tunnel-down test (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). |
-| Text transfer, `launch --attach` | **Not tested live.** The offline suite covers file validation, the disk image arguments, the dedicated-user wrapper path, cleanup and the guest mount configuration with stubs. No real VM has mounted the transfer disk, opened it in Firefox or read it from the guest user's account, and no run in mode 1 has attached a file. |
+| Text transfer, `launch --attach` (run mode 1) | A text file attached with `sudo mayfly launch --core-policy --attach` could be opened in the guest browser at `file:///mnt/transfer/` and copied from there. Run mode 2, the Tor Browser and I2P entries, and hostile file names were not tested live. |
 | Other distributions | **Not live-tested.** |
 
 Each live test above was run on a single host. The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
