@@ -32,8 +32,8 @@ check 'attach: safe names are kept, everything else becomes transfer.txt' \
 
 # ---- validation on the open descriptor ---------------------------------------
 check 'attach: a good file is copied byte for byte into a 0600 file' \
-    mf_st "$mf_att"'mf_attach_read "$good" "$UID" "$d/o"; cmp -s "$good" "$d/o"; [[ $(stat -c %a "$d/o") == 600 ]]
-        printf "caf\xc3\xa9 text \xe2\x9c\x93 end" > "$src/u.txt"; mf_attach_read "$src/u.txt" "$UID" "$d/u"; cmp -s "$src/u.txt" "$d/u"
+    mf_st "$mf_att"'mf_attach_read "$good" "$UID" "$d/o"; [[ $(sha256sum < "$good") == "$(sha256sum < "$d/o")" ]]; [[ $(stat -c %a "$d/o") == 600 ]]
+        printf "caf\xc3\xa9 text \xe2\x9c\x93 end" > "$src/u.txt"; mf_attach_read "$src/u.txt" "$UID" "$d/u"; [[ $(sha256sum < "$src/u.txt") == "$(sha256sum < "$d/u")" ]]
         printf "x" > "$src/one.txt"; mf_attach_read "$src/one.txt" "$UID" "$d/one"
         head -c 1048576 /dev/zero | tr "\0" a > "$src/max.txt"; mf_attach_read "$src/max.txt" "$UID" "$d/max"; [[ $(stat -c %s "$d/max") == 1048576 ]]'
 check 'attach: symlink, directory, FIFO, missing file and relative path are refused' \
@@ -90,7 +90,7 @@ check 'attach: a real ISO tool, when installed, builds an image labelled transfe
 check 'attach: user mode copies the file into the session, names it safely and builds the ISO there' \
     mf_st "$mf_att"'run=$d/run; mkdir -m 700 "$run"; mf_attach_prepare user "$good" "$run"
         [[ $MF_ATTACH_ISO == "$run/transfer.iso" && -s $run/transfer.iso && $(stat -c %a "$run/transfer.iso") == 600 ]]
-        [[ $(ls -A "$run/transfer") == post.txt && $(stat -c %a "$run/transfer/post.txt") == 600 ]]; cmp -s "$good" "$run/transfer/post.txt"
+        [[ $(ls -A "$run/transfer") == post.txt && $(stat -c %a "$run/transfer/post.txt") == 600 ]]; [[ $(sha256sum < "$good") == "$(sha256sum < "$run/transfer/post.txt")" ]]
         [[ $(< "$d/iso.log") == "genisoimage -quiet -output $run/transfer.iso -volid transfer -r $run/transfer" ]]
         for n in -evil.txt .hidden "a b.txt" "a;b"; do
             rm -rf "$run/transfer" "$run/transfer.iso"; cp "$good" "$src/$n"; mf_attach_prepare user "$src/$n" "$run"
@@ -266,7 +266,7 @@ mf_att_ns='
 '
 check 'attach wrapper: the file is read as root on its descriptor into the private tmpfs and only that copy reaches the launcher' \
     mf_sub "$mf_att_ns"'rc=0; (mf_ns_launch $(id -u) wayland-0 0 test-09 "$d/home/post.txt") || rc=$?; [[ $rc == 0 ]]
-        cmp -s "$d/seen" "$d/home/post.txt"; [[ $(< "$d/seenmode") == 640 && $(< "$d/seendir") == 750 ]]
+        [[ $(sha256sum < "$d/seen") == "$(sha256sum < "$d/home/post.txt")" ]]; [[ $(< "$d/seenmode") == 640 && $(< "$d/seendir") == 750 ]]
         grep -q "^runuser .*launch --attach-staged $MF_RUN_DIR/attach/post.txt " "$log"; neg grep -q "$d/home" <(grep "^runuser" "$log")
         grep -q "^chown root:mayfly -- $MF_RUN_DIR/attach/post.txt\$" "$log"; grep -q "mount -t tmpfs .*size=3m" "$log"
         [[ ! -e $MF_RUN_DIR/attach/post.txt ]]; [[ -f $d/home/post.txt ]]'
