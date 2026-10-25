@@ -11,6 +11,7 @@ project=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 source "$project/lib/policy.sh"
 source "$project/lib/host.sh"
 source "$project/lib/runtime.sh"
+source "$project/lib/attach.sh"
 source "$project/lib/build.sh"
 source "$project/lib/preflight.sh"
 source "$project/lib/state.sh"
@@ -25,11 +26,11 @@ usage() {
         '       bash mayfly.sh setup [--core-policy] [--yes]' \
         '       bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE]' \
         '       bash mayfly.sh build [PINS-FILE] [NAME | NEW-BASE-DIRECTORY]' \
-        '       bash mayfly.sh launch [--core-policy] [NAME]' \
+        '       bash mayfly.sh launch [--attach FILE] [--core-policy] [NAME]' \
         '       bash mayfly.sh check-profile [--core-policy] [PROFILE-FILE]' \
         '       bash mayfly.sh core-policy apply|restore|status' \
         '       bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY' \
-        '       bash mayfly.sh launch [--core-policy] BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]' \
+        '       bash mayfly.sh launch [--attach FILE] [--core-policy] BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]' \
         'Defaults live in the state directory: MAYFLY_HOME, else $XDG_STATE_HOME/mayfly,' \
         'else ~/.local/state/mayfly (pins/build.pins, secrets/wireguard.conf, bases/NAME).' \
         'launch uses the newest base. build names a new base base-YYYYMMDD and never overwrites.' \
@@ -37,6 +38,8 @@ usage() {
         '--core-policy applies the host core-dump policy if needed (uses sudo, host-wide) and' \
         'restores it on exit only when this command applied it and no QEMU process runs.' \
         'RAM-PARENT defaults to /dev/shm. A private 0700 session subdirectory is created.' \
+        '--attach FILE gives the browser VM one read-only text file (1 byte to 1 MiB, no NUL bytes,' \
+        'owned by you) as a disk; open file:///mnt/transfer/NAME in the guest. One way, needs a rebuilt base.' \
         'Build pins: IMAGE_URL, IMAGE_SHA256, TOR_URL, TOR_SHA256 (literal key=value).' \
         'fetch-pins verifies the Debian image against Debian'\''s published SHA512SUMS (Debian' \
         'publishes no detached signature) and Tor Browser against Tor'\''s pinned signing key.' \

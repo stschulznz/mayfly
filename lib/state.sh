@@ -194,6 +194,27 @@ mf_split_core_flag() {
     done
 }
 
+# Launch options: --core-policy, --attach FILE (a path, relative allowed) and
+# the internal --attach-staged PATH that only the dedicated-user wrapper uses.
+# Sets MF_CORE_FLAG, MF_ARGS, MF_ATTACH and MF_ATTACH_STAGED.
+mf_split_launch_flags() {
+    MF_CORE_FLAG=0 MF_ARGS=() MF_ATTACH='' MF_ATTACH_STAGED=''
+    while (( $# )); do
+        case $1 in
+            --core-policy) MF_CORE_FLAG=1; shift ;;
+            --attach)
+                (( $# >= 2 )) && [[ -n $2 && -z $MF_ATTACH ]] || { usage; exit 64; }
+                MF_ATTACH=$2; shift 2 ;;
+            --attach-staged)
+                (( $# >= 2 )) && [[ -n $2 && -z $MF_ATTACH_STAGED ]] || { usage; exit 64; }
+                MF_ATTACH_STAGED=$2; shift 2 ;;
+            -*) usage; exit 64 ;;
+            *) MF_ARGS+=("$1"); shift ;;
+        esac
+    done
+    [[ -z $MF_ATTACH || -z $MF_ATTACH_STAGED ]] || { usage; exit 64; }
+}
+
 # mf_cmd_check_profile [--core-policy] [ABSOLUTE-PROFILE]
 mf_cmd_check_profile() {
     local state profile
@@ -251,8 +272,20 @@ mf_cmd_build() {
 # Absolute BASE-DIRECTORY PROFILE-FILE [RAM-PARENT] is the long form used by
 # the dedicated-user wrapper.
 mf_cmd_launch() {
-    local state base profile parent=/dev/shm name
-    mf_split_core_flag "$@"
+    local state base profile parent=/dev/shm name attach_file
+    local -a attach=()
+    mf_split_launch_flags "$@"
+    if [[ -n $MF_ATTACH ]]; then
+        # Resolve in the invoking user's context; the file itself is validated
+        # and read once, on its open descriptor, inside the launcher.
+        attach_file=$MF_ATTACH
+        [[ $attach_file == /* ]] || attach_file=$(pwd -P)/$attach_file
+        [[ -f $attach_file && ! -L $attach_file ]] ||
+            mf_die 'attach file must be an existing regular file and not a symlink' 66
+        attach=(user "$attach_file")
+    elif [[ -n $MF_ATTACH_STAGED ]]; then
+        attach=(staged "$MF_ATTACH_STAGED")
+    fi
     case ${#MF_ARGS[@]} in
         0|1)
             state=$(mf_state_init check)
@@ -280,9 +313,9 @@ mf_cmd_launch() {
         printf '%s\n' "$MF_REMINDER" >&2
     fi
     if (( MF_CORE_FLAG )); then
-        mf_core_guarded mf_launch_sub "$base" "$profile" "$parent" "$root"
+        mf_core_guarded mf_launch_sub "$base" "$profile" "$parent" "$root" "${attach[@]}"
     else
-        mf_launch "$base" "$profile" "$parent" "$root"
+        mf_launch "$base" "$profile" "$parent" "$root" "${attach[@]}"
     fi
 }
 

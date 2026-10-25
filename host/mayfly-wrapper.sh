@@ -9,6 +9,8 @@ set -euo pipefail
 export LC_ALL=C
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
+# Relative --attach paths are resolved against the directory sudo was run from.
+MF_CALLER_PWD=$(pwd -P 2>/dev/null) || MF_CALLER_PWD=/
 cd /
 
 MF_USER=mayfly
@@ -32,7 +34,7 @@ mf_usage() {
         '       sudo mayfly doctor' \
         '       sudo mayfly check-profile [--core-policy]' \
         '       sudo mayfly build [NEW-BASE-NAME]' \
-        '       sudo mayfly launch [--core-policy] [--diag] [--display wayland-N] [BASE-NAME]' \
+        '       sudo mayfly launch [--attach FILE] [--core-policy] [--diag] [--display wayland-N] [BASE-NAME]' \
         '       sudo mayfly core-policy apply|restore|status' \
         '       sudo mayfly status' \
         '       sudo mayfly stop' \
@@ -41,7 +43,8 @@ mf_usage() {
         'build without a name creates base-YYYYMMDD. launch without a name uses the newest base.' \
         '--core-policy applies the host-wide core-dump policy if needed and undoes it afterwards.' \
         'cleanup revokes leftover socket access and removes orphaned VMs when no session runs.' \
-        '--diag writes nonsecret counters readable only by that user and root.'
+        '--diag writes nonsecret counters readable only by that user and root.' \
+        '--attach FILE shows one text file (up to 1 MiB, owned by you) to the browser VM, read only.'
 }
 
 mf_valid_name() {
@@ -79,11 +82,14 @@ mf_wayland_name() {
 # Parse "launch" options into MF_ARG_DIAG, MF_ARG_DISPLAY, MF_ARG_CORE and
 # MF_ARG_NAME. An empty name means the newest base.
 mf_parse_launch() {
-    MF_ARG_DIAG=0 MF_ARG_DISPLAY='' MF_ARG_NAME='' MF_ARG_CORE=0
+    MF_ARG_DIAG=0 MF_ARG_DISPLAY='' MF_ARG_NAME='' MF_ARG_CORE=0 MF_ARG_ATTACH=''
     while (( $# )); do
         case $1 in
             --diag) MF_ARG_DIAG=1; shift ;;
             --core-policy) MF_ARG_CORE=1; shift ;;
+            --attach)
+                (( $# >= 2 )) && [[ -n $2 && -z $MF_ARG_ATTACH && $2 != *[[:cntrl:]]* ]] || return 1
+                MF_ARG_ATTACH=$2; shift 2 ;;
             --display)
                 (( $# >= 2 )) || return 1
                 MF_ARG_DISPLAY=$2; shift 2 ;;
@@ -151,14 +157,16 @@ mf_env_cmd() {
 }
 
 mf_launch_cmd() {
-    local name=$1 diag=$2 target=$3
-    local -a extra=("WAYLAND_DISPLAY=$target")
+    local name=$1 diag=$2 target=$3 staged=${4:-}
+    local -a extra=("WAYLAND_DISPLAY=$target") attach=()
+    # Only the wrapper's own copy under /run/mayfly is ever named here.
+    [[ -z $staged ]] || attach=(--attach-staged "$staged")
     if [[ $diag == 1 ]]; then
         extra+=(MAYFLY_DIAG=1)
     fi
     [[ -z ${MF_REMINDER_SHOWN:-} ]] || extra+=(MF_REMINDER_SHOWN=1)
     mf_env_cmd "${extra[@]}" bash "$MF_PROG/mayfly.sh" launch \
-        "$MF_STATE/bases/$name" "$MF_STATE/secrets/wireguard.conf" /dev/shm
+        "${attach[@]}" "$MF_STATE/bases/$name" "$MF_STATE/secrets/wireguard.conf" /dev/shm
 }
 
 mf_run_as() {
@@ -262,9 +270,17 @@ mf_cmd_core_policy() {
 }
 
 mf_cmd_launch() {
-    local uid wl svc base
+    local uid wl svc base attach=''
+    local -a attach_arg=()
     mf_parse_launch "$@" || { mf_usage >&2; exit 64; }
     mf_check_install
+    if [[ -n $MF_ARG_ATTACH ]]; then
+        # Resolve in the caller's directory. The file is validated and read once,
+        # as root on its open descriptor, inside the namespace.
+        attach=$MF_ARG_ATTACH
+        [[ $attach == /* ]] || attach=$MF_CALLER_PWD/$attach
+        attach_arg=("$attach")
+    fi
     svc=$(id -u "$MF_USER")
     if [[ -z $MF_ARG_NAME ]]; then
         MF_ARG_NAME=$(mf_newest_base) || mf_die 'no base found; run: sudo mayfly setup'
@@ -284,11 +300,11 @@ mf_cmd_launch() {
     if [[ $MF_ARG_CORE == 1 ]]; then
         # Not exec: this shell must outlive the session to undo the policy.
         mf_load_core_policy
-        mf_core_guarded mf_launch_ns "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME"
+        mf_core_guarded mf_launch_ns "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME" "${attach_arg[@]}"
         return
     fi
     exec env MF_IN_NS=1 unshare --mount --propagation private -- \
-        "$MF_SELF" __ns-launch "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME"
+        "$MF_SELF" __ns-launch "$uid" "$wl" "$MF_ARG_DIAG" "$MF_ARG_NAME" "${attach_arg[@]}"
 }
 
 mf_launch_ns() {
@@ -298,6 +314,7 @@ mf_launch_ns() {
 
 MF_NS_TARGET=''
 MF_NS_ACL=0
+MF_NS_ATTACH=''
 
 # Revoke the service user's access to the shared socket. Uses globals because
 # an EXIT trap runs after the function that set them has returned.
@@ -306,13 +323,36 @@ mf_ns_revoke() {
         setfacl -x "u:$MF_USER" -- "$MF_NS_TARGET" 2>/dev/null || :
     fi
     MF_NS_ACL=0
+    # The copy of the attach file goes with the session even if the tmpfs lingers.
+    if [[ -n $MF_NS_ATTACH ]]; then
+        rm -f -- "$MF_NS_ATTACH" 2>/dev/null || :
+        MF_NS_ATTACH=''
+    fi
     return 0
+}
+
+# Internal: copy the user's file into the namespace-private /run/mayfly tmpfs
+# as a root-owned 0640 root:mayfly file, validated on its open descriptor.
+# This is the only attach path the service-user launcher is ever given.
+mf_ns_stage_attach() {
+    local src=$1 uid=$2 name
+    mf_check_install
+    source "$MF_PROG/lib/policy.sh"
+    source "$MF_PROG/lib/attach.sh"
+    name=$(mf_attach_name "$src")
+    install -d -m 0750 -o root -g "$MF_USER" -- "$MF_RUN_DIR/attach"
+    MF_NS_ATTACH=$MF_RUN_DIR/attach/$name
+    mf_attach_read "$src" "$uid" "$MF_NS_ATTACH" || mf_die 'the attach file was refused'
+    chown "root:$MF_USER" -- "$MF_NS_ATTACH"
+    chmod 0640 -- "$MF_NS_ATTACH"
 }
 
 # Internal: runs inside the private mount namespace as root.
 mf_ns_launch() {
-    local uid=${1:-} wl=${2:-} diag=${3:-} name=${4:-} src rc=0
+    local uid=${1:-} wl=${2:-} diag=${3:-} name=${4:-} attach=${5:-} src rc=0
     [[ $uid =~ ^[1-9][0-9]*$ && $wl =~ $MF_WAYLAND_RE && $diag =~ ^[01]$ ]] ||
+        mf_die 'invalid internal arguments' 64
+    [[ -z $attach || ( $attach == /* && $attach != *[[:cntrl:]]* ) ]] ||
         mf_die 'invalid internal arguments' 64
     mf_valid_name "$name" || mf_die 'invalid internal arguments' 64
     # Mounts here must never land in the real namespace.
@@ -328,7 +368,7 @@ mf_ns_launch() {
     trap mf_ns_revoke EXIT
     trap : INT
     install -d -m 0755 -o root -g root -- "$MF_RUN_DIR"
-    mount -t tmpfs -o mode=0755,nosuid,nodev,noexec,size=1m tmpfs "$MF_RUN_DIR"
+    mount -t tmpfs -o mode=0755,nosuid,nodev,noexec,size=3m tmpfs "$MF_RUN_DIR"
     : > "$MF_NS_TARGET"
     mount --bind "$src" "$MF_NS_TARGET"
     # The user controls the directory that held the path, so validate the object
@@ -340,7 +380,10 @@ mf_ns_launch() {
     # because it holds other world-connectable sockets such as audio.
     MF_NS_ACL=1
     setfacl -m "u:$MF_USER:rw" -- "$MF_NS_TARGET"
-    mf_launch_cmd "$name" "$diag" "$MF_NS_TARGET"
+    if [[ -n $attach ]]; then
+        mf_ns_stage_attach "$attach" "$uid"
+    fi
+    mf_launch_cmd "$name" "$diag" "$MF_NS_TARGET" "$MF_NS_ATTACH"
     runuser -u "$MF_USER" -- "${MF_CMD[@]}" || rc=$?
     mf_ns_revoke
     return "$rc"

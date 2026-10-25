@@ -299,7 +299,8 @@ bash mayfly.sh build [PINS-FILE] [NAME]
 bash mayfly.sh doctor ABSOLUTE-RAM-DIRECTORY
 
 # Start a session from the newest base, or from the named one.
-bash mayfly.sh launch [--core-policy] [NAME]
+# --attach FILE also gives the browser VM one text file to read (see below).
+bash mayfly.sh launch [--attach FILE] [--core-policy] [NAME]
 
 # Set, undo, or show the temporary crash-dump policy. It changes a host-wide setting.
 bash mayfly.sh core-policy apply|restore|status
@@ -310,11 +311,33 @@ bash mayfly.sh core-policy apply|restore|status
 - The absolute-path forms still work and are what the dedicated-user wrapper uses: `build ABS-PINS ABS-NEW-BASE` and `launch ABS-BASE ABS-PROFILE [RAM-PARENT]`.
 - [DEPLOYMENT.md](DEPLOYMENT.md#manual-and-advanced-steps) has the manual steps, host diagnostics, the leak test and troubleshooting.
 
+### Copy a text file into the session
+
+`launch --attach FILE` gives the browser VM one text file to read, without a clipboard bridge. Mayfly builds a tiny read-only disk image holding only that file and attaches it to the browser VM alone, as a CD-ROM. The guest mounts it read-only at `/mnt/transfer`. The transfer goes one way, from the host into the VM. The gateway VM gets no extra device, and the disk image lives in the session's RAM directory and is removed with it.
+
+```bash
+# Start a session and attach one text file. Run it in mode 2.
+bash mayfly.sh launch --attach post.txt
+
+# The same in the dedicated-user mode (mode 1).
+sudo mayfly launch --attach post.txt
+
+# Then, inside the VM, open this address in the browser, select the text and copy it there:
+# file:///mnt/transfer/post.txt
+```
+
+- The guest can read only that one file. Attach nothing you wouldn't disclose to the session: the browser, and anything you open in it, can read the text, and any site you paste it into receives it.
+- The file must be a regular file that you own (not a symlink), from 1 byte to 1 MiB, with no NUL bytes. Mayfly reads it once and refuses anything else with a fixed message that never shows its content.
+- The name in the VM is the file's name when it uses only letters, digits, `.`, `_` and `-`, is at most 64 characters, and doesn't start with `-` or `.`. Otherwise it's `transfer.txt`.
+- The guest image carries the mount setup, so you need a base built from this version of Mayfly. Build a new base before you use `--attach`.
+- An ISO tool (`genisoimage`, `mkisofs` or `xorriso`) is required, as for every launch.
+- This hasn't been tested live yet. See [Tested](#tested).
+
 ## Tested
 
 | What | Result |
 |---|---|
-| Offline suite, `bash tests/run.sh` (518 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
+| Offline suite, `bash tests/run.sh` (560 checks) | Passes inside distrobox containers of Debian 13, Ubuntu 24.04, Fedora 44, Arch and openSUSE Tumbleweed. |
 | Live image build, boot and browsing | Verified on **one** host (Bazzite, Fedora family) only: Firefox over WireGuard, Tor Browser over Tor over WireGuard, and I2P. A bookmark made in one session was absent from the next. |
 | Dedicated-user boundary (run mode 1) | Verified on that same host: the `mayfly` user owned the QEMU processes, `/var/lib/mayfly` was `root` mode `drwx--x--x`, and the `mayfly` user's profile and `/proc/<pid>/mem` of the VMs were denied to the desktop user. |
 | `--core-policy`, apply and automatic restore (run mode 1) | On a host whose original setting was the `systemd-coredump` handler with `fs.suid_dumpable = 2`, `sudo mayfly launch --core-policy` set `/dev/null` and `0` for the session and restored the original values when the session closed. The same sequence ran in same-user mode (mode 2) with the same result: the same-user restore accepted that handler and `fs.suid_dumpable = 2`. |
@@ -323,6 +346,7 @@ bash mayfly.sh core-policy apply|restore|status
 | RAM-only writes (run mode 1) | While the session ran, `/dev/shm` grew from 65 MiB to 307 MiB after a large download and browsing, while `/` and `/var/home` changed by 5 MiB or less (other host activity). After the session ended, no `mayfly.*` directory remained in `/dev/shm`, and the only file the `mayfly` user had written on disk since the start was a small `dconf` cache file in its home directory. Browsing content wasn't looked for on disk beyond that file listing. |
 | Leak test, all three entries (run mode 1) | Per-user packet counters on that host. After the Firefox, Tor Browser and I2P sessions, the `mayfly` user had sent 15,939 packets off the machine, and all 15,939 went to the WireGuard endpoint. The counters were cumulative, so each session added to the total and none added a packet elsewhere. No DNS, IPv6 or other traffic from the VMs was counted. One session per entry is not proof for every case. |
 | Tunnel-down test (run mode 1) | With a profile whose endpoint port was wrong, no site loaded. The `mayfly` user sent 11 packets off the machine, all to that endpoint and port (WireGuard handshake retries). |
+| Text transfer, `launch --attach` | **Not tested live.** The offline suite covers file validation, the disk image arguments, the dedicated-user wrapper path, cleanup and the guest mount configuration with stubs. No real VM has mounted the transfer disk, opened it in Firefox or read it from the guest user's account, and no run in mode 1 has attached a file. |
 | Other distributions | **Not live-tested.** |
 
 Each live test above was run on a single host. The offline suite checks parsers, policy text, host predicates, and mocked build and launch failure paths. It doesn't boot VMs or prove routing.
@@ -361,7 +385,8 @@ bash mayfly.sh fetch-pins [--yes] [--debian DATE-BUILD] [--tor X.Y.Z] [PINS-FILE
 bash mayfly.sh build [PINS-FILE] [NAME | NEW-BASE-DIRECTORY]
 
 # Start a session from the newest base, or from the named one.
-bash mayfly.sh launch [--core-policy] [NAME]
+# --attach FILE gives the browser VM one text file to read.
+bash mayfly.sh launch [--attach FILE] [--core-policy] [NAME]
 
 # Check a WireGuard profile without printing it. The default is the profile in the state directory.
 bash mayfly.sh check-profile [--core-policy] [PROFILE-FILE]
@@ -386,7 +411,7 @@ bash mayfly.sh launch BASE-DIRECTORY PROFILE-FILE [RAM-PARENT]
 - `launch` starts a session. With no base it uses the newest one. `RAM-PARENT` defaults to `/dev/shm`, and the launcher creates its own `0700` subdirectory there. The resulting session path must be shorter than 75 characters, because of the UNIX socket limit.
 - `core-policy` applies, restores or shows the temporary core-dump policy. `restore` refuses while any QEMU process exists.
 
-Run mode 1 uses `sudo mayfly setup`, `fetch-pins`, `doctor`, `check-profile [--core-policy]`, `build [NAME]`, `launch [--core-policy] [--diag] [--display wayland-N] [NAME]`, `core-policy`, `status`, `stop` and `cleanup`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
+Run mode 1 uses `sudo mayfly setup`, `fetch-pins`, `doctor`, `check-profile [--core-policy]`, `build [NAME]`, `launch [--attach FILE] [--core-policy] [--diag] [--display wayland-N] [NAME]`, `core-policy`, `status`, `stop` and `cleanup`. See [DEPLOYMENT.md](DEPLOYMENT.md#10-run-as-a-dedicated-user-mode-1).
 
 Use canonical absolute paths with no symlink components. For build and runtime data paths, use only letters, digits, `_`, `.`, `/` and `-`.
 

@@ -9,7 +9,7 @@ mf_st_prelude='
     export HOME=$d/home MAYFLY_HOME=$d/state
     unset XDG_STATE_HOME MF_CORE_STATE
     mkdir -p "$HOME"
-    for f in policy host runtime build preflight state pins corepolicy; do source "$project/lib/$f.sh"; done
+    for f in policy host runtime build preflight state pins corepolicy attach; do source "$project/lib/$f.sh"; done
     root=$project
     usage() { printf "usage\n"; }
     run() { set +e; ( set -e; "$@" ) > "$d/out" 2>&1; rc=$?; set -e; }
@@ -587,7 +587,7 @@ check 'cli: mayfly.sh rejects bad subcommand words with status 64' \
             run bash "$project/mayfly.sh" $a; [[ $rc == 64 ]]; done'
 check 'cli: help names the new commands and states the Debian trust limit' \
     mf_st 'run bash "$project/mayfly.sh"; [[ $rc == 64 ]]
-        for w in "setup" "fetch-pins" "core-policy apply|restore|status" "--core-policy" "no detached signature" "mayfly.sh launch [--core-policy] BASE-DIRECTORY PROFILE-FILE"; do grep -qF -- "$w" "$d/out"; done'
+        for w in "setup" "fetch-pins" "core-policy apply|restore|status" "--core-policy" "no detached signature" "mayfly.sh launch [--attach FILE] [--core-policy] BASE-DIRECTORY PROFILE-FILE"; do grep -qF -- "$w" "$d/out"; done'
 check 'cli: core-policy status runs read-only against the real host' \
     mf_st 'run bash "$project/mayfly.sh" core-policy status; [[ $rc == 0 ]]; grep -q "^requirement:" "$d/out"; [[ ! -e $d/state ]]'
 

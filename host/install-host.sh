@@ -19,6 +19,7 @@ MF_WRAPPER=/usr/local/sbin/mayfly
 # Exact runtime files copied to the root-owned tree. Tests and docs stay out.
 MF_RUNTIME_FILES=(
     mayfly.sh
+    lib/attach.sh
     lib/build.sh
     lib/corepolicy.sh
     lib/host.sh

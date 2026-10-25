@@ -68,9 +68,17 @@ install -o root -g root -m 644 -- /tmp/firefox-policies.json \
     /etc/firefox/policies/policies.json
 mf_browser_update_policies /etc/firefox/policies/policies.json \
     /opt/tor-browser/Browser/distribution/policies.json
+# One-way transfer disk. The host attaches a read-only ISO with the volume
+# label "transfer" only when launch --attach is used. Mount it by label (the
+# seed disk is also a CD-ROM, so the device node is not stable), read-only and
+# nosuid,nodev,noexec, through an automount so boot never waits for it.
+mkdir -p /mnt/transfer
+printf '%s\n' 'LABEL=transfer /mnt/transfer iso9660 ro,nosuid,nodev,noexec,nofail,x-systemd.automount,x-systemd.device-timeout=3s 0 0' >> /etc/fstab
 # System-wide files must be traversable/readable by the desktop user even
 # though the appliance build shell uses umask 077.
 chmod 755 /usr/share/xsessions /etc/lightdm/lightdm.conf.d /etc/firefox /etc/firefox/policies
+# The browser user must traverse the mount point's parents.
+chmod 755 /mnt /mnt/transfer
 chmod 644 /usr/share/xsessions/mayfly.desktop \
     /etc/lightdm/lightdm.conf.d/50-mayfly.conf \
     /etc/firefox/policies/policies.json

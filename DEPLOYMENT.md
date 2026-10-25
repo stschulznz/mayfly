@@ -123,7 +123,7 @@ find . -type f -name '*.sh' -exec bash -n {} \;
 bash tests/run.sh
 ```
 
-Expected: no syntax errors, and the last line reports `518 passed, 0 failed`. These checks don't boot a VM or prove routing.
+Expected: no syntax errors, and the last line reports `560 passed, 0 failed`. These checks don't boot a VM or prove routing.
 
 Then run preflight. It changes nothing:
 
@@ -292,6 +292,23 @@ The gateway VM starts first, and the browser VM starts after the gateway's priva
 To check which route an entry uses, open `https://check.torproject.org/api/ip` in the VM. Firefox should report your VPN's egress address and `IsTor: false`. Tor Browser should report `IsTor: true`. An address difference alone doesn't prove the VPN path, and these checks don't prove that DNS, IPv6 or fallback traffic is absent. That proof needs a leak test. See [step 12](#12-leak-test-check-that-nothing-leaves-outside-the-tunnel). The test exposes your egress to that site, so use no accounts. In the Firefox entry, also open `about:policies`. It should list the active policies (for example `DisableAppUpdate` and `DNSOverHTTPS`). If it says the Enterprise Policies service is inactive, the hardening policy isn't loading, so don't rely on that base.
 
 The I2P entry shows a progress window while the router joins the network, which usually takes a few minutes. Type `http://` before `.i2p` names. If joining never finishes, suspect the guest clock first. See the [I2P limits](README.md#the-i2p-entry).
+
+### Copy a text file into the session
+
+To read a long text in the guest without a clipboard bridge, attach it at launch:
+
+```bash
+# Attach one text file. A relative path is resolved against your current directory.
+bash mayfly.sh launch --attach post.txt
+```
+
+Inside the VM, open `file:///mnt/transfer/post.txt` in the browser and copy the text from there. Mayfly validates the file on the open descriptor (a regular file that you own, not a symlink, 1 byte to 1 MiB, no NUL bytes), reads it once, and builds a read-only ISO9660 disk with the label `transfer` in the session's RAM directory. Only the browser VM receives it, as a read-only CD-ROM. The guest mounts it by label at `/mnt/transfer` with `ro,nosuid,nodev,noexec,nofail` through an automount, so boot never waits for it, and without `--attach` the directory is simply empty. Nothing goes back from the guest. The ISO and the copy are removed with the session.
+
+- Mode 1: `sudo mayfly launch --attach post.txt`. The root wrapper opens the file as root but requires that it belongs to the user who ran `sudo`, validates the open descriptor, and writes a root-owned `0640` copy into its private `/run/mayfly` mount. The `mayfly` user's launcher accepts only that exact wrapper path and never a path you give it. Relative paths resolve against the directory you ran `sudo` from.
+- The guest file name is the host file name if it uses only letters, digits, `.`, `_` and `-` (at most 64 characters, not starting with `-` or `.`), otherwise `transfer.txt`.
+- Limits: one file, up to 1 MiB of text. The guest can read only that file, and anything open in the guest browser can read it, so attach nothing you wouldn't disclose to the session. Your own host files are never exposed beyond the one you name.
+- Requires a base built from a version of Mayfly that has the mount setup. Rebuild the base first (step 11).
+- This feature hasn't been tested live. See [Tested](README.md#tested).
 
 ## 7. End sessions
 
@@ -652,6 +669,9 @@ Make a copy of your profile with a wrong port in the `Endpoint` line, and launch
 | `doctor` fails on swap, resume or crash dump | Disk swap, zram with writeback, a configured resume device, or a loaded or reserved crash kernel is refused. See step 8. |
 | `UNIX socket path too long` | The session path must be shorter than 75 characters. Use a shorter `RAM-PARENT`. |
 | Build fails, or you have an unfinished base | A failed build leaves partial nonsecret artifacts. Don't use them. Retry with a new destination. |
+| `launch --attach` says the file was refused | The messages are fixed text and never show the file. It must be a regular file that you own, not a symlink, a directory or a FIFO, from 1 byte to 1 MiB, with no NUL bytes (so no binary data). In mode 1 it must belong to the user who ran `sudo`. Convert other formats to plain text first. |
+| `launch --attach` says an ISO tool is required, or the ISO could not be built | Install `genisoimage`, `mkisofs` or `xorriso` (`bash mayfly.sh preflight` prints the command). |
+| `/mnt/transfer` is empty or missing in the VM | The session was started without `--attach`, or the base was built before the transfer mount existed. Rebuild the base and launch with `--attach FILE`. |
 | Profile rejected | The parser reports a field name and a fixed message. Compare the profile with the [supported format](README.md#wireguard-profile-format), and check the file's owner, mode, parent directory and link count. |
 | Blank VM window, or a socket timeout | Rerun a nonsensitive session with `MAYFLY_DIAG=1` (step 8). A handshake value of `0` means the tunnel isn't up. |
 | I2P progress window never finishes | The guest has no time sync, so suspect the clock. The session ends after about ten minutes. Read `i2p_tunnels` in `browser-diag.log`. The launcher waits for 6 tunnels. |

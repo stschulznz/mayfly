@@ -165,6 +165,10 @@ mf_qemu_args() {
             -netdev "stream,id=lan,server=off,addr.type=unix,addr.path=$run/lan.sock"
             -device virtio-net-pci,netdev=lan,mac=52:54:00:fa:00:02
         )
+        # One-way transfer disk: read-only CD-ROM, browser VM only.
+        if [[ -n ${MF_ATTACH_ISO:-} ]]; then
+            MF_QEMU+=(-drive "file=$MF_ATTACH_ISO,format=raw,media=cdrom,readonly=on")
+        fi
     fi
 }
 
@@ -263,8 +267,8 @@ mf_wait_gateway_socket() {
 
 mf_launch() {
     set -euo pipefail
-    local bases=$1 profile=$2 parent=$3 root=$4 role
-    MF_RUN='' MF_BROWSER_PID='' MF_GATEWAY_PID=''
+    local bases=$1 profile=$2 parent=$3 root=$4 attach_mode=${5:-} attach_path=${6:-} role
+    MF_RUN='' MF_BROWSER_PID='' MF_GATEWAY_PID='' MF_ATTACH_ISO=''
     MF_BROWSER_START='' MF_GATEWAY_START='' MF_SESSION_PID=$BASHPID
     mf_native
     mf_base_check "$bases"
@@ -299,6 +303,11 @@ mf_launch() {
     unset DBUS_SESSION_BUS_ADDRESS
     mkdir -m 700 -- "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" \
         "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR"
+    # Validate and build the one-way transfer disk before the profile is read.
+    # It lives in the session directory and is removed with it.
+    if [[ -n $attach_mode ]]; then
+        mf_attach_prepare "$attach_mode" "$attach_path" "$MF_RUN" || return 1
+    fi
     [[ ${#MF_RUN} -lt 75 ]] || { mf_error 'UNIX socket path too long'; return 1; }
     mf_open_profile "$profile" "$root"
     # Snapshot exact opened bytes into private RAM before parsing. The guest

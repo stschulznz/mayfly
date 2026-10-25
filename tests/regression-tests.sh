@@ -70,6 +70,10 @@ repair_browser_policy() (
     for f in i2pd.conf i2p-tunnels.conf i2p-user.js; do
         cp -- "$project/guest/$f" "$sandbox/$f"
     done
+    # The base image already has /mnt, and /etc/fstab holds the root entry. A
+    # private /mnt models the build shell's umask 077.
+    mkdir -m 700 "$sandbox/mnt"
+    printf '%s\n' 'UUID=root-fixture / ext4 defaults 0 1' | dd of="$sandbox/etc/fstab" status=none
     mkdir -p "$sandbox/usr/bin" "$sandbox/usr/share/i2pd/certificates"
     printf '' | dd of="$sandbox/usr/bin/i2pd" status=none; chmod 755 "$sandbox/usr/bin/i2pd"
     source <(repair_source _ guest/browser-prepare.sh |
@@ -78,7 +82,7 @@ repair_browser_policy() (
             -e "s|/tmp/i2p-user.js|$sandbox/i2p-user.js|g" \
             -e "s|/opt/|$sandbox/opt/|g" -e "s|/etc/|$sandbox/etc/|g" \
             -e "s|/usr/|$sandbox/usr/|g" -e "s|/tmp/tor.tar.xz|$sandbox/tor.tar.xz|g" \
-            -e "s|mkdir -p /opt |mkdir -p $sandbox/opt |")
+            -e "s|mkdir -p /opt |mkdir -p $sandbox/opt |" -e "s|/mnt\\b|$sandbox/mnt|g")
     [[ -f $policy && $(stat -c %a "$policy") == 644 &&
        $(stat -c %a "${policy%/*}") == 755 &&
        $MF_TEST_OWNERS == *"root:root $sandbox/opt/tor-browser $sandbox/opt/tor-browser/Browser;"* ]] || return 1
@@ -109,6 +113,13 @@ repair_browser_policy() (
     done
     # The desktop user must be able to traverse every parent of the Firefox policy file.
     [[ $(stat -c %a "$sandbox/etc/firefox") == 755 ]] || return 1
+    # Transfer disk: the browser user must traverse the mount point and its
+    # parent, the mount is read-only and never blocks boot, and the existing
+    # fstab entry is kept.
+    [[ $(stat -c %a "$sandbox/mnt") == 755 && $(stat -c %a "$sandbox/mnt/transfer") == 755 ]] || return 1
+    [[ $(sed -n 1p "$sandbox/etc/fstab") == 'UUID=root-fixture / ext4 defaults 0 1' &&
+       $(grep -c 'transfer' "$sandbox/etc/fstab") == 1 &&
+       $(grep 'transfer' "$sandbox/etc/fstab") == "LABEL=transfer $sandbox/mnt/transfer iso9660 ro,nosuid,nodev,noexec,nofail,x-systemd.automount,x-systemd.device-timeout=3s 0 0" ]] || return 1
 )
 
 # Deliberately narrow fake QEMU 8 stream parser, based on v8.0.0 qapi/net.json.
@@ -128,6 +139,25 @@ repair_qemu8_parse() {
     done
     # A simulated disconnect schedules no reconnect with the schema default 0.
     [[ $reconnect == 0 ]]
+}
+
+# Deliberately narrow fake -drive parser for the transfer CD-ROM: only the keys
+# the launcher uses, raw format, and it must be a read-only CD-ROM.
+repair_qemu8_drive_parse() {
+    local item key media='' readonly_value=''
+    local -a items
+    IFS=, read -r -a items <<< "$1"
+    for item in "${items[@]}"; do
+        key=${item%%=*}
+        case $key in
+            file) ;;
+            format) [[ ${item#*=} == raw ]] || return 1 ;;
+            media) media=${item#*=} ;;
+            readonly) readonly_value=${item#*=} ;;
+            *) return 1 ;;
+        esac
+    done
+    [[ $media == cdrom && $readonly_value == on ]]
 }
 
 repair_qemu() (
