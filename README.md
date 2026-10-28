@@ -491,6 +491,8 @@ Live-tested on **one** machine: Windows 11 (build 26300), WSL 2.7.8.0, WSLg 1.0.
 
 ## Reference
 
+The sections below describe the Linux commands first. Sections that say Windows describe `mayfly.ps1`.
+
 ### Commands
 
 ```text
@@ -537,9 +539,42 @@ Run mode 1 uses `sudo mayfly setup`, `fetch-pins`, `doctor`, `check-profile [--c
 
 Use canonical absolute paths with no symlink components. For build and runtime data paths, use only letters, digits, `_`, `.`, `/` and `-`.
 
+### Windows commands
+
+These are the `mayfly.ps1` commands, run in PowerShell from the Mayfly folder. The commands above are for Linux.
+
+```powershell
+# Check Windows and WSL and, once set up, the base distro. Changes nothing.
+.\mayfly.ps1 preflight
+
+# Download and verify the Debian rootfs, build the base distro and import it.
+.\mayfly.ps1 setup [-Yes] [-Rebuild]
+
+# Check a WireGuard profile without printing it. The default is secrets\wireguard.conf in the state folder.
+.\mayfly.ps1 check-profile [-Profile PATH]
+
+# Start a session. Without -Entry it asks which browser to start.
+.\mayfly.ps1 launch [-Entry firefox|i2p|tor] [-Profile PATH]
+
+# Remove stale session mounts and stop the base distro.
+.\mayfly.ps1 cleanup
+
+# Unregister the base distro and delete the downloads and builds. The secrets folder is kept.
+.\mayfly.ps1 uninstall [-Yes]
+```
+
+- `preflight` is read-only. It exits `78` if anything is missing and prints the fix for each item.
+- `setup` shows the rootfs URL and published SHA-256 and asks before it downloads. `-Yes` skips the question. It also downloads and verifies Tor Browser. It refuses to replace an existing `mayfly` distro unless you pass `-Rebuild`, and with `-Rebuild` it replaces the distro only after the new base has been built and checksummed.
+- `check-profile` sends the profile to the distro for the shared strict parser and prints no keys. It refuses a profile that other accounts can read.
+- `launch` runs one session from the profile and always runs `cleanup` afterwards. Closing the browser ends the session.
+- `cleanup` is safe to run at any time. It also stops the base distro, which frees the session RAM.
+- `uninstall` asks you to type `uninstall` unless you pass `-Yes`. Only `uninstall` and `setup -Rebuild` run `wsl --unregister` on the base distro.
+
+The state folder is `%LOCALAPPDATA%\mayfly`, or the folder in the `MAYFLY_HOME` environment variable. It holds `pins`, `secrets`, `downloads`, `build`, `rootfs` and `distro`. Exit codes: `0` success, `1` an error with a fixed `BLOCKED:` message, `64` a usage error, `78` a refused preflight.
+
 ### Memory and host checks
 
-The launcher checks these conditions before it reads a real profile:
+On Linux, the launcher checks these conditions before it reads a real profile:
 
 | Condition | Requirement |
 |---|---|
@@ -553,6 +588,28 @@ The launcher checks these conditions before it reads a real profile:
 | Process core dumps | Zero soft and hard core limits, `suid_dumpable=0`, and a non-piped core pattern |
 
 These checks are snapshots, not resource reservations. Another application can consume RAM after launch, and a large shared tmpfs isn't a private session quota. Don't weaken a refused check just to start the VMs.
+
+### Windows host checks
+
+`preflight` reports these, and `launch` runs the checks inside the distro again before it reads the profile:
+
+| Condition | Requirement |
+|---|---|
+| Windows | Build 22000 or later (Windows 11) |
+| WSL | Version 2 or later, with a WSLg version reported by `wsl --version` (English output) |
+| WSL swap | `swap=0` under `[wsl2]` in `%UserProfile%\.wslconfig`, then `wsl --shutdown` |
+| Base distro | A distro named `mayfly` exists |
+| Swap in the VM | `/proc/swaps` has no entry. An unreadable file counts as a failure. |
+| Windows interop | `enabled=false` and `appendWindowsPath=false` in the distro's `/etc/wsl.conf`, no Windows folder in `PATH`, and no `WSL_INTEROP` variable |
+| Windows drives | None mounted at `/mnt/<letter>` |
+| overlayfs | Listed in `/proc/filesystems` |
+| WireGuard | The kernel module is loaded, or `wireguard-go` and `/dev/net/tun` exist (the module loads on first use) |
+| Tools | `nft`, `bwrap`, `wg`, `ip`, `nsenter`, `setpriv`, `unshare`, `flock`, `jq` |
+| WSLg | The Wayland socket exists at `/mnt/wslg/runtime-dir/wayland-0` |
+| Browser user | `browser` exists with uid 1000 |
+| Other sessions | None. One session runs at a time (`launch` checks this, `preflight` does not). |
+
+There is no minimum-memory or tmpfs-capacity check as on Linux. A session uses a 512 MiB tmpfs for the overlay's writable layer and 1 GiB each for `/tmp` and the home directory, all in the WSL VM's RAM. These checks are also snapshots, and Mayfly can't stop you from turning swap on or hibernating after the session starts.
 
 ### Pins file
 
@@ -571,6 +628,17 @@ Build checks both SHA-256 pins. It also fetches the matching Tor signature and s
 
 A successful build produces `gateway.qcow2` and `browser.qcow2`, each with a 16 GiB virtual size, mode `0444` and a `.sha256` companion file. Guest package versions from Debian repositories aren't pinned, so builds are not reproducible.
 
+### Pins file on Windows
+
+`setup` writes `pins\wsl.pins` in the state folder: literal `KEY=value` lines, never shell, and any other line is refused.
+
+| Field | Value |
+|---|---|
+| `ROOTFS_URL` | HTTPS URL of the Debian trixie root filesystem under `raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/` |
+| `ROOTFS_SHA256` | SHA-256 published in the same repository, 64 lowercase hexadecimal digits |
+
+`setup` deletes a download whose SHA-256 differs. Debian publishes no detached signature for this file. Tor Browser is not in the pins file: its version comes from Tor's published list and its archive is verified against the pinned Tor signing key fingerprint, as on Linux. The build produces `rootfs\mayfly-rootfs.tar.gz` with a `.sha256` companion file, and imports it with `wsl --import`. Delete `wsl.pins` to fetch a newer rootfs.
+
 ### WireGuard profile format
 
 Get a profile privately from your provider. Never paste it into an issue, terminal transcript, chat, test fixture or repository.
@@ -585,6 +653,8 @@ The parser supports a deliberately restricted format:
 | One `[Peer]`, second | `PublicKey`, `AllowedIPs = 0.0.0.0/0`, public numeric IPv4 `Endpoint` with UDP port 1 to 65535 | `PresharedKey`, `PersistentKeepalive` (0 to 65535) |
 
 The address, resolver and endpoint must be distinct and must avoid the fixed guest networks. Mayfly rejects hostname endpoints, IPv6, split tunnels, multiple peers, multiple addresses or resolvers, hooks, includes, routing-table overrides, and unknown or duplicate fields. A valid `wg-quick` profile from your provider may therefore not be supported.
+
+On Windows the same parser runs, so the same fields and rejections apply, including the fixed Linux guest networks, which the Windows variant does not use. Only the file checks differ. The file must be an ordinary file, not a link, of 1 to 16384 bytes. Neither the file nor its folder may grant access to any account but yours, so keep it in the `secrets` folder of the state folder. A file copied into that folder inherits the right permissions. The profile's `MTU` is an upper limit: the launcher lowers the tunnel MTU to fit the WSL uplink.
 
 ## Documentation
 

@@ -5,7 +5,7 @@
     preflight                  Check Windows and WSL (read-only) and print the fix for anything missing.
     setup [-Yes] [-Rebuild]    Fetch and verify a Debian rootfs, build the base distro "mayfly", import it.
     check-profile [-Profile P] Check the WireGuard profile format without printing it.
-    launch [-Entry firefox|i2p|tor] Start one session. Close the browser to end it.
+    launch [-Entry firefox|i2p|tor] [-Profile P]  Start one session. Close the browser to end it.
     cleanup                    Remove stale session mounts and stop the base distro.
     uninstall [-Yes]           Unregister the base distro and delete the downloaded and built files.
     State lives in %LOCALAPPDATA%\mayfly (override with MAYFLY_HOME), owner-only.
@@ -367,7 +367,7 @@ function Invoke-MfUninstall {
 # Print the command summary.
 function Show-MfUsage {
     Write-Host 'Usage: .\mayfly.ps1 preflight | setup [-Yes] [-Rebuild] | check-profile [-Profile PATH]'
-    Write-Host '       .\mayfly.ps1 launch [-Entry firefox|i2p|tor] | cleanup | uninstall [-Yes]'
+    Write-Host '       .\mayfly.ps1 launch [-Entry firefox|i2p|tor] [-Profile PATH] | cleanup | uninstall [-Yes]'
     Write-Host 'First run: preflight, setup, copy your WireGuard file to the secrets folder, launch.'
 }
 
