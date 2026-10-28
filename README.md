@@ -60,7 +60,7 @@ What this doesn't mean, and why the claim "no trace" is not safe to make:
 Mayfly is also built for security research on parts of the internet you wouldn't open on your everyday system, such as dark web and I2P sites. Every page runs in a throwaway VM, not on your host. That limits the damage a hostile page can do:
 
 - **An exploit has to get out of the VM.** A browser exploit lands inside the VM first. To reach your computer it would also need a way out of the VM.
-- **Nothing crosses back by default.** There are no shared folders, no shared clipboard and no download export. Files you open or download in a session stay in the session. The `--attach` option only goes from your host into the VM.
+- **Nothing crosses back by default.** There are no shared folders, no shared clipboard and no download export (on Windows the clipboard is shared; see [Windows](#windows)). Files you open or download in a session stay in the session. The `--attach` option only goes from your host into the VM.
 - **The VM can't reach your home network.** The browser VM has one connection, to the gateway VM, and the gateway lets out only the WireGuard tunnel. In the packet counter test, every packet the VMs sent went to the VPN endpoint, so none went to other devices on your network.
 - **Nothing persists.** The base image is read-only and the session overlay is in RAM, so malware that lands in a session is gone when it ends.
 - **A separate user in run mode 1.** The VMs run as the `mayfly` user, not as you.
@@ -394,7 +394,100 @@ Also unverified: I2P joining time and SSU2 behavior at the guest's 1280-byte MTU
 
 ## Windows
 
-WSL2 support is planned. It isn't available yet.
+Mayfly for Windows 11 runs in WSL2 with `mayfly.ps1`. It is a different design from the Linux version, with a weaker isolation boundary. Read [what it does not give you](#what-the-windows-variant-does-not-give-you) before you rely on it.
+
+How it works:
+
+- Setup downloads a Debian 13 root filesystem, checks its SHA-256 against the digest Debian publishes in the same repository, builds a small base distro called `mayfly` and imports it once with `wsl --import`. This is the base. Mayfly writes to it only during setup, rebuild and uninstall. WSL itself still updates files such as `/etc/hosts` and filesystem metadata when the distro starts.
+- Each session mounts the base root as the read-only lower layer of an overlayfs. The upper layer, `/tmp`, the home directory and the Firefox profile are on tmpfs, in RAM. A bubblewrap sandbox uses that overlay as its root. Closing the browser unmounts the tmpfs and removes the session directory.
+- WireGuard comes from the same strict profile parser as the Linux version (`lib/policy.sh`). The tunnel interface is moved into a private network namespace that holds only `lo` and `wg0`. The sandbox runs in that namespace, so the browser has no other IP route. The default-deny nft rules load inside the namespace before `wg0` comes up: only the browser user may send, only through `wg0`, DNS only to the tunnel resolver, special-use addresses refused, and IPv6 off. WSL2 distros share one network namespace, so the rules cannot go in the distro itself without cutting off your other distros.
+- `/etc/wsl.conf` in the base distro turns off Windows drive automount, interop and the Windows `PATH`.
+- Firefox uses the same hardening policy file as the Linux version. The I2P entry reuses the Linux configuration. Setup also installs Tor Browser, checked against the same pinned Tor signing key as the Linux build (`lib/pins.sh`), and the Tor entry runs it in the same sandbox and namespace, so Tor runs over WireGuard.
+- Firefox shows its window through WSLg over X11. Wayland froze Firefox on the one machine tested (Windows 11 build 26300), so the sandbox forces X11. The sandbox gets the WSLg X11 socket only, not the Wayland or audio sockets (so no sound).
+
+### Requirements for Windows
+
+- Windows 11 with a current WSL (`wsl --update`) and WSLg. Tested with WSL 2.7.8.0 only, and the launcher reads the English output of `wsl --version`.
+- Swap off. WSL swap is global to every distro and is set in `%UserProfile%\.wslconfig`. Mayfly refuses to start while `/proc/swaps` has an entry. Put this in the file, then run `wsl --shutdown`:
+
+```ini
+[wsl2]
+swap=0
+```
+
+- A WireGuard profile in the [accepted format](#wireguard-profile-format) with exactly one `DNS` address. If your provider lists two, keep the first.
+
+### Windows quick start
+
+Run these in PowerShell from the Mayfly folder. Use a local drive. If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first (it affects only that window), and if you downloaded a ZIP, run `Get-ChildItem -Recurse | Unblock-File` once. The steps in [DEPLOYMENT.md](DEPLOYMENT.md#windows-and-wsl2) cover the same ground in more detail.
+
+```powershell
+# Check Windows and WSL. It changes nothing and prints the fix for anything missing.
+.\mayfly.ps1 preflight
+
+# Download and verify the rootfs, build the base distro and import it (several minutes).
+.\mayfly.ps1 setup
+
+# Copy your profile into the owner-only secrets folder, then check its format. It never prints the file.
+Copy-Item C:\path\to\provider.conf "$env:LOCALAPPDATA\mayfly\secrets\wireguard.conf"
+.\mayfly.ps1 check-profile
+
+# Start a session. Close the browser to end it.
+.\mayfly.ps1 launch
+```
+
+Other commands: `launch` asks which browser to start (Firefox, I2P or Tor Browser), `launch -Entry firefox|i2p|tor` skips the question, `cleanup` removes stale session mounts and stops the base distro, `setup -Rebuild` rebuilds the base after you update Mayfly, and `uninstall` unregisters the distro and deletes the downloaded and built files. State lives in `%LOCALAPPDATA%\mayfly`. The `secrets` and `pins` folders are owner-only. The rest keeps the default permissions because the WSL service can't create the distro disk in an owner-only folder. `uninstall` leaves `secrets` in place.
+
+### What the Windows variant does not give you
+
+- **A weaker boundary than the Linux version.** Every WSL2 distro runs in one shared utility VM with one Linux kernel. Linux Mayfly puts the browser in its own VM. Here a kernel or sandbox escape reaches the shared VM and your other distros.
+- **RAM-only only while swap is off.** Session writes avoid the distro disk (`ext4.vhdx`) only while the VM has no swap. Mayfly checks `/proc/swaps` at launch, but nothing stops you from turning swap on later.
+- **Windows controls the VM's memory.** Windows can page the WSL VM's memory to its own page file, and hibernation and crash dumps can capture it. Mayfly has no control over any of these. On the machine tested, hibernation was available (`hiberfil.sys` present), the page file was system-managed at about 9.7 GB and not cleared at shutdown, and crash dumps were set to automatic. That is exposure only: I did not test whether session data reaches any of them, because those files can't be read while Windows runs.
+- **Mount metadata on disk.** The base mount is read-only, but the ext4 journal may still record metadata about mounting it.
+- **A shared clipboard.** WSLg shares the clipboard with Windows in both directions, and the sandbox does not block it (tested). Anything you copy in a session reaches Windows, and anything on your Windows clipboard can be read by the browser.
+- **A trusted host.** Windows, the WSL service and anything with access to your account can read the session, the profile in `%LOCALAPPDATA%\mayfly\secrets`, and the VM's memory.
+- **Windows drivers visible read-only.** WSL mounts `/usr/lib/wsl/drivers` (the Windows driver store) in the distro. The sandbox root doesn't include it.
+- **The WSLInterop entry.** WSL keeps a `WSLInterop` binfmt entry registered VM-wide even when a distro disables interop. Mayfly checks `wsl.conf`, the `PATH` and the environment, and doesn't treat that entry as proof either way.
+- **An unauthenticated X server.** WSLg's X server has no authentication. A compromised browser could read other WSLg windows and the clipboard, and send input to them. Keep other WSLg windows closed during a session. Mayfly does not run a separate X server per session.
+- **Other channels out of the sandbox.** The sandbox keeps the WSLg X11 socket and has no seccomp filter. Mayfly does not restrict VM sockets (AF_VSOCK), which are not part of a network namespace. Whether a browser exploit could use them is unverified.
+- **The tunnel's own traffic.** The encrypted WireGuard UDP leaves the namespace through the shared WSL network, as any WSL traffic does. Mayfly doesn't filter it there.
+
+### Windows: tested and unverified
+
+Live-tested on **one** machine: Windows 11 (build 26300), WSL 2.7.8.0, WSLg 1.0.73.2, kernel 6.18.33.1.
+
+| What | Result |
+|---|---|
+| Offline suite, `bash tests/run.sh` (562 checks) | Unchanged. Passes in a Debian 13 distro. The Linux files weren't edited. |
+| `bash tests/wsl-tests.sh` (49 to 50 checks, depending on whether `nft --check` can run) and Pester `tests\wsl` (17 checks) | Pass. They check rule text, the preflight predicates, the profile parser path, and the launcher guards. They don't start a session. |
+| Setup, preflight, check-profile and launch | Worked. The base distro built and imported, and Firefox opened through WSLg. |
+| Swap | With `swap=0` in `.wslconfig` and a `wsl --shutdown`, `/proc/swaps` was empty. The sandbox saw no swap. |
+| Sandbox | Firefox ran as `browser` (uid 1000) with no capabilities and `NoNewPrivs` set. Its network namespace held only `lo` and `wg0`. `/tmp`, the home directory and `/` were tmpfs or overlay on tmpfs. No Windows drive was visible. |
+| WireGuard (kernel module) | With a synthetic local server: DNS queries from Firefox reached the tunnel resolver through `wg0`. With a real provider profile: a handshake and several MiB of traffic received. |
+| Kill switch | With a synthetic server: a UDP packet to another resolver on port 53 was refused. With `wg0` down, nothing reached the server and the default route disappeared. |
+| Disk writes | After sessions that held a throwaway private key and a marker string, a byte scan of `ext4.vhdx` found neither. The same scan found a marker written to the base on purpose. |
+| MTU | On this machine the WSL uplink MTU was 1280. With the tunnel at 1420, TLS handshakes stalled while DNS and TCP connects worked. At 1220, HTTPS requests succeeded. The launcher now sets the tunnel MTU from the uplink. |
+| Entries | Firefox loaded HTTPS pages (after the MTU fix). I2P opened an eepsite (`stats.i2p`, `200 OK` through the local proxy; a clearnet name was refused as designed). Tor Browser started with its `tor` process inside the sandbox. |
+| Uplink capture, Firefox entry | With a real provider profile, a capture of the WSL uplink (`eth0`) from another distro during one browsing session held 57,361 packets. 57,339 were UDP to and from the profile's endpoint. The rest were ARP, host multicast discovery that also appeared in a no-session baseline, and 6 NTP packets from the VM's own address (most likely another distro's time sync). No DNS, TCP, ICMP or IPv6 left the machine. This shows nothing about traffic inside the tunnel. |
+| Uplink capture, I2P entry | Same method, on the same machine, during one I2P session with eepsites loading. 4,076 packets: 3,953 were UDP to and from the profile's endpoint. No TCP, DNS or sandbox IPv6. The rest were host multicast discovery, NTP from the VM's address about every 34 seconds, and 4 ICMP port-unreachable replies to the endpoint about the previous session's closed port. |
+| Uplink capture, Tor entry | Same method, same machine, one Tor Browser session that browsed normally. 26,869 packets: 26,628 were UDP to and from the profile's endpoint on the session's port, plus 64 on the previous session's closed port. One short TCP flow to `motd.ubuntu.com` came from the other distro's own `motd-news` timer (its journal shows it starting at the same second), not from the session. Host multicast discovery and NTP appeared as before. No DNS and no sandbox IPv6. ``check.torproject.org`` confirmed Tor in the browser. |
+| DNS, IPv6 and tunnel down, Firefox entry | In one Firefox session with a real provider profile: a DNS leak test site (`browserleaks.com/dns`) listed the provider's addresses, and `test-ipv6.com` reported no IPv6. With `wg0` brought down inside the session namespace, a loaded page no longer loaded, the namespace had no route, and the capture of the shared uplink (25,566 packets, mostly UDP to the endpoint) showed no sandbox traffic to any other address. After that the tunnel and default route were restored by hand and the session worked again. The only TCP in the capture was a 4-second burst to Canonical addresses within 3 seconds of the capture starting, before the session started: the other distro's boot-time update checks, identified by timing and addresses, not by process. |
+| Wrong endpoint port, Firefox entry | With a copy of the real profile whose endpoint port was changed to one that does not answer: Firefox opened and no page loaded. The first 70 seconds of the capture held 29 packets. The sandbox sent only 7 WireGuard handshake attempts to the wrong port, answered by 7 ICMP port-unreachable replies. One stray 32-byte packet came from the previous session's tunnel closing. No DNS, TCP, IPv6 or other address. |
+| Clearnet in the I2P entry | In one I2P session, `.i2p` sites loaded and clearnet sites (including a DNS test site and an IPv6 test site) could not be found, as designed (no outproxy). A packet capture of the same entry earlier showed no DNS or sandbox IPv6 leaving the machine. |
+| DNS and IPv6, Tor entry | In one Tor Browser session: `check.torproject.org` said Tor and showed an address that Tor's public exit list contains (a Netherlands exit). A DNS leak test listed resolvers in Stockholm, not the provider's. `test-ipv6.com` showed an IPv6 address that Tor's relay data (Onionoo) lists as the OR address of four running exit relays, so it was an exit, not the machine (Tor Browser uses a separate circuit per site, so it differed from the exit ``check.torproject.org`` saw). The session's namespace held only `lo` and `wg0`, with no IPv6 address or route, IPv6 disabled and the IPv6 drop rules loaded, so the sandbox has no IPv6 of its own to leak. |
+| `wireguard-go` (forced) | With `MF_WSL_USERSPACE=1` on a machine that also has the kernel module, one Firefox session: the tunnel came up and DNS and TCP connects worked, but HTTPS stalled at tunnel MTU 1220. `wireguard-go` needs 80 bytes of overhead, not 60. At 1200, HTTPS to three sites succeeded (3 of 3, 3 of 3, 2 of 3 attempts), and the launcher now uses 80 for this path. Only the Firefox entry was tried, checked with curl from inside the sandbox. |
+| Clipboard | In a Firefox session, a marker text put on the Windows clipboard pasted into Firefox's address bar, and text copied in Firefox appeared on the Windows clipboard. WSLg shares the clipboard in both directions, and the sandbox does not block it. |
+| Cleanup | After each session the launcher exited 0, the distro stopped, and no session mount or `mfw` interface remained. |
+
+**Unverified:**
+
+- The leak test for Windows with any provider other than the one tested. See the [leak test for Windows](DEPLOYMENT.md#windows-and-wsl2).
+- `wireguard-go` on a machine that has no WireGuard kernel module. It was forced on a machine that has one (`MF_WSL_USERSPACE=1`).
+- Tor circuit details. Tor Browser loaded sites and `check.torproject.org` confirmed Tor, and nothing more was checked.
+- Windows 10, other Windows or WSL builds, WSL mirrored networking, and a distro that already holds a Windows drive mount.
+- Whether Windows pages, hibernates or dumps the WSL VM's memory in practice, and what the ext4 journal records.
+- A real tunnel outage in the middle of a session (the endpoint going silent). Bringing `wg0` down by hand and a wrong endpoint port were tested. Also a `wsl --shutdown` during a session.
+- A non-English Windows. The version checks match English text.
 
 ## Reference
 

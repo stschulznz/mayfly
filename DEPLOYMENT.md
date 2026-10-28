@@ -693,3 +693,72 @@ Make a copy of your profile with a wrong port in the `Endpoint` line, and launch
 | `sudo mayfly launch` can't pick a Wayland socket | Pass `--display wayland-N`. |
 | After a build, a mode 1 command can't find the base | Base names allow letters, digits, `_` and `-`, up to 64 characters. Check `sudo mayfly status`. |
 | A first run in mode 1 fails | Report the exact command, its exit status and the fixed message. Check for SELinux denials with `sudo ausearch -m avc -ts recent`. `doctor` also warns if `dev.tty.legacy_tiocsti` is enabled, which would let a process sharing your terminal inject keystrokes. |
+
+## Windows and WSL2
+
+This section covers `mayfly.ps1`, the Windows 11 variant. Read the [README section](README.md#windows) first: it states the design and what the variant does not give you. Everything here was tried on one machine only; the README lists what is unverified.
+
+### 1. Prepare Windows
+
+You need Windows 11, an ordinary user account (no administrator prompt is needed except for `wsl --update`) and about 3 GB of free disk space. Open PowerShell in the Mayfly folder. If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, which affects only that window. If you downloaded Mayfly as a ZIP, run `Get-ChildItem -Recurse | Unblock-File` once in the folder.
+
+1. Update WSL: `wsl --update`. WSLg ships with it. Check `wsl --version` shows a WSLg version.
+2. Turn swap off. WSL swap is global to every distro. Create or edit `%UserProfile%\.wslconfig` and add:
+
+   ```ini
+   [wsl2]
+   swap=0
+   ```
+
+3. Run `wsl --shutdown` so the setting applies. This ends every running WSL distro, so save your work in them first.
+4. From the Mayfly folder, run `.\mayfly.ps1 preflight`. It is read-only and prints the fix for anything missing. It reports the Windows build, WSL and WSLg, the `.wslconfig` swap setting and, once the base distro exists, the checks inside it: no swap in `/proc/swaps`, interop and drive automount off, overlayfs, WireGuard (kernel module or `wireguard-go`), `nft`, `bwrap`, WSLg and the `browser` user.
+
+### 2. Set up and launch
+
+```powershell
+.\mayfly.ps1 setup
+Copy-Item C:\path\to\provider.conf "$env:LOCALAPPDATA\mayfly\secrets\wireguard.conf"
+.\mayfly.ps1 check-profile
+.\mayfly.ps1 launch   # asks: Firefox, I2P or Tor Browser. Use -Entry firefox|i2p|tor to skip the question.
+```
+
+`setup` shows the rootfs URL and the published SHA-256, then asks before it downloads (`-Yes` skips the question). It records them in `%LOCALAPPDATA%\mayfly\pins\wsl.pins` and keeps that file for later rebuilds. Delete it to fetch a newer rootfs. Debian publishes no detached signature for this file, so trust is HTTPS to GitHub plus the digest in the same repository.
+
+Setup also contacts Debian mirrors, the Tor Project, and keys.openpgp.org, and takes the current Tor Browser version without asking you to confirm it.
+
+The profile must meet the same [restricted format](README.md#wireguard-profile-format) as on Linux. A profile with two `DNS` addresses is refused. Edit the copy in the `secrets` folder, not your original. `check-profile` and `launch` also refuse a profile whose file or folder is readable by any other account. The profile goes to the distro on standard input and exists only in RAM during the session. It is never printed.
+
+`launch` asks which browser to start: Firefox, I2P or Tor Browser. `setup` downloads Tor Browser, takes the version from Tor's published list, and verifies the archive against the pinned Tor signing key fingerprint, the same check as `fetch-pins` on Linux but without a pins file; run `setup -Rebuild` to pick up a newer version. `launch` refuses to start if `/proc/swaps` has any entry, if another session is running, or if any preflight check fails. Closing the browser ends the session. Run `.\mayfly.ps1 cleanup` if a session ended badly. It removes stale session mounts and stops the base distro.
+
+To rebuild after updating Mayfly, run `.\mayfly.ps1 setup -Rebuild`. To remove everything except your profile, run `.\mayfly.ps1 uninstall`. Only `uninstall` and `setup -Rebuild` run `wsl --unregister` on the base distro.
+
+### 3. Leak test for Windows
+
+Run the session, then the checks below from a second PowerShell window. The first helper prints nothing secret. Use `-f` so `pgrep` matches the namespace holder.
+
+```powershell
+# Shows the interfaces in the session network namespace. Expect only lo and wg0.
+wsl -d mayfly -u root -- bash -c 'H=$(pgrep -f "^sleep infinity$" | head -n 1); nsenter --net=/proc/$H/ns/net -- ip -o link'
+```
+
+1. **Packet counters.** Run the command above, then `... -- ip -s link show wg0` before and after browsing. The `wg0` counters rise. No other interface exists in the namespace, so nothing else can carry browser traffic. Then check the sandbox user: `wsl -d mayfly -u root -- bash -c 'H=$(pgrep -f "^sleep infinity$" | head -n 1); nsenter --net=/proc/$H/ns/net -- nft list chain inet mayfly output'` and confirm the rules end with the browser-uid `accept` on `wg0` and nothing else.
+2. **Capture on the uplink.** WSL2 distros share one network namespace, so you can capture from another distro. Install `tcpdump` in a throwaway or second distro, keep your other distros idle, and capture on `eth0` while you browse: `sudo tcpdump -ni eth0 -w mayfly.pcap`. Compare it with a capture taken with no session. Apart from WSL's own housekeeping traffic, the only new packets should be UDP to the endpoint address and port in your profile. This is the same idea as Method 2 in the Linux leak test, but `tests/capture/analyze.sh` has not been tried on WSL captures, so read them by hand: `tcpdump -nr mayfly.pcap udp | awk '{print $3" > "$5}' | sort | uniq -c | sort -rn | head` lists the peers, and `tcpdump -nr mayfly.pcap 'ip and not udp'` lists any TCP or ICMP. Starting a capture also starts the other distro, whose own update checks and time sync (NTP) appear in the capture for a few seconds. Check their addresses and timing before calling them a leak.
+3. **DNS.** In the Firefox entry, open a DNS leak test site and confirm the resolvers belong to your VPN provider. In the Tor entry they should be Tor exit resolvers instead, and `check.torproject.org` should say you are using Tor. In the I2P entry clearnet sites are refused by design, so only `.i2p` sites load. Inside the namespace, DNS to any address except the profile's resolver is dropped; the output chain shows `udp dport 53 drop` and `tcp dport 53 drop` after the resolver `accept` lines.
+4. **IPv6.** In the Firefox entry, open an IPv6 test site and confirm it reports no IPv6 address. In the Tor entry a site may show an IPv6 address that belongs to a Tor exit relay, because exits can reach sites over IPv6. You can check an address at `https://onionoo.torproject.org/details?search=ADDRESS`. In the namespace, `... -- ip -6 addr` prints nothing.
+5. **Tunnel down.** In the session, run `... -- ip link set wg0 down` against the namespace. Pages must stop loading. The default route disappears with the interface, so connections fail at once, and no packet leaves the namespace. Run `.\mayfly.ps1 cleanup` afterwards: bringing `wg0` back up does not restore the route, by design. Also try a profile with the wrong endpoint port: no page loads, and only WireGuard handshake retries reach the endpoint.
+
+Record the Windows build, the `wsl --version` output and your result for each check. One pass on one machine is not proof for every case.
+
+### 4. Troubleshooting on Windows
+
+| Symptom | What to do |
+|---|---|
+| `preflight` says swap is active | Set `swap=0` in `%UserProfile%\.wslconfig` and run `wsl --shutdown`. Check `wsl -d mayfly -u root -- cat /proc/swaps` shows only the header line. |
+| `wsl --import` fails with an unhandled exception during `setup` | The target folder is probably owner-only. Don't set `MAYFLY_HOME` to a folder with a restricted ACL. |
+| `setup` can't find the Mayfly sources from WSL | Run it from a folder on a local drive, with no apostrophe in the path. |
+| `check-profile` says one numeric tunnel resolver is required | Your profile has two DNS addresses. Keep the first in the copy in the `secrets` folder. |
+| `launch` says another session is running | Run `.\mayfly.ps1 cleanup`. |
+| No Firefox window | Run `wsl --update`, then `wsl --shutdown`, and check `preflight` reports WSLg. |
+| `launch` fails right after a Windows or WSL update | Run `.\mayfly.ps1 setup -Rebuild`. |
+| Pages stall at "Performing a TLS handshake" while DNS works | The WSL uplink MTU is smaller than the tunnel MTU (WSL uplinks can be 1280). launch prints "Tunnel MTU ... (uplink eth0 has ...)" and lowers the tunnel MTU to fit (80 bytes of overhead for the `wireguard-go` fallback, 60 for the kernel module). If it still stalls, check `wsl -d mayfly -u root -- cat /sys/class/net/eth0/mtu`. |
+| The browser icon shows in the taskbar but the window hangs, and its title reads "[WARN:COPY MODE]" | WSLg fell back to a degraded display path. Seen on Windows build 26300 together with a frozen Firefox; it cleared after `wsl --update`, `wsl --shutdown` and a restart, but whether that was the cause is unverified. A Linux app in another distro showing the same title points to WSLg, not Mayfly. |
