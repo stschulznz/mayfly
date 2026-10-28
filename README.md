@@ -394,7 +394,7 @@ Also unverified: I2P joining time and SSU2 behavior at the guest's 1280-byte MTU
 
 ## Windows
 
-Mayfly for Windows 11 runs in WSL2 with `mayfly.ps1`. It is a different design from the Linux version, with a weaker isolation boundary. Read [what it does not give you](#what-the-windows-variant-does-not-give-you) before you rely on it.
+Mayfly for Windows 11 runs in WSL2 with `mayfly.ps1`. It is a different design from the Linux version, with a weaker isolation boundary. Read the [limits of the Windows variant](#limits-of-the-windows-variant) before you rely on it.
 
 How it works:
 
@@ -438,19 +438,19 @@ Copy-Item C:\path\to\provider.conf "$env:LOCALAPPDATA\mayfly\secrets\wireguard.c
 
 Other commands: `launch` asks which browser to start (Firefox, I2P or Tor Browser), `launch -Entry firefox|i2p|tor` skips the question, `cleanup` removes stale session mounts and stops the base distro, `setup -Rebuild` rebuilds the base after you update Mayfly, and `uninstall` unregisters the distro and deletes the downloaded and built files. State lives in `%LOCALAPPDATA%\mayfly`. The `secrets` and `pins` folders are owner-only. The rest keeps the default permissions because the WSL service can't create the distro disk in an owner-only folder. `uninstall` leaves `secrets` in place.
 
-### What the Windows variant does not give you
+### Limits of the Windows variant
 
-- **A weaker boundary than the Linux version.** Every WSL2 distro runs in one shared utility VM with one Linux kernel. Linux Mayfly puts the browser in its own VM. Here a kernel or sandbox escape reaches the shared VM and your other distros.
+- **Weaker isolation than the Linux version.** Every WSL2 distro runs in one shared utility VM with one Linux kernel. Linux Mayfly puts the browser in its own VM. Here a kernel or sandbox escape reaches the shared VM and your other distros.
 - **RAM-only only while swap is off.** Session writes avoid the distro disk (`ext4.vhdx`) only while the VM has no swap. Mayfly checks `/proc/swaps` at launch, but nothing stops you from turning swap on later.
-- **Windows controls the VM's memory.** Windows can page the WSL VM's memory to its own page file, and hibernation and crash dumps can capture it. Mayfly has no control over any of these. On the machine tested, hibernation was available (`hiberfil.sys` present), the page file was system-managed at about 9.7 GB and not cleared at shutdown, and crash dumps were set to automatic. That is exposure only: I did not test whether session data reaches any of them, because those files can't be read while Windows runs.
+- **Windows controls the VM's memory.** Windows can page the WSL VM's memory to its own page file, and hibernation and crash dumps can capture it. Mayfly has no control over any of these. On the machine tested, hibernation was available (`hiberfil.sys` present), the page file was system-managed at about 9.7 GB and not cleared at shutdown, and crash dumps were set to automatic. That is exposure only. Whether session data reaches any of them was not tested, because those files can't be read while Windows runs.
 - **Mount metadata on disk.** The base mount is read-only, but the ext4 journal may still record metadata about mounting it.
 - **A shared clipboard.** WSLg shares the clipboard with Windows in both directions, and the sandbox does not block it (tested). Anything you copy in a session reaches Windows, and anything on your Windows clipboard can be read by the browser.
-- **A trusted host.** Windows, the WSL service and anything with access to your account can read the session, the profile in `%LOCALAPPDATA%\mayfly\secrets`, and the VM's memory.
-- **Windows drivers visible read-only.** WSL mounts `/usr/lib/wsl/drivers` (the Windows driver store) in the distro. The sandbox root doesn't include it.
-- **The WSLInterop entry.** WSL keeps a `WSLInterop` binfmt entry registered VM-wide even when a distro disables interop. Mayfly checks `wsl.conf`, the `PATH` and the environment, and doesn't treat that entry as proof either way.
-- **An unauthenticated X server.** WSLg's X server has no authentication. A compromised browser could read other WSLg windows and the clipboard, and send input to them. Keep other WSLg windows closed during a session. Mayfly does not run a separate X server per session.
-- **Other channels out of the sandbox.** The sandbox keeps the WSLg X11 socket and has no seccomp filter. Mayfly does not restrict VM sockets (AF_VSOCK), which are not part of a network namespace. Whether a browser exploit could use them is unverified.
-- **The tunnel's own traffic.** The encrypted WireGuard UDP leaves the namespace through the shared WSL network, as any WSL traffic does. Mayfly doesn't filter it there.
+- **You must trust the host.** Windows, the WSL service and anything with access to your account can read the session, the profile in `%LOCALAPPDATA%\mayfly\secrets`, and the VM's memory.
+- **The Windows driver store is visible read-only in the distro.** WSL mounts `/usr/lib/wsl/drivers` (the Windows driver store) in the distro. The sandbox root doesn't include it.
+- **The WSLInterop entry stays registered.** WSL keeps a `WSLInterop` binfmt entry registered VM-wide even when a distro disables interop. Mayfly checks `wsl.conf`, the `PATH` and the environment, and doesn't treat that entry as proof either way.
+- **The X server has no authentication.** WSLg's X server has no authentication. A compromised browser could read other WSLg windows and the clipboard, and send input to them. Keep other WSLg windows closed during a session. Mayfly does not run a separate X server per session.
+- **Other channels may lead out of the sandbox.** The sandbox keeps the WSLg X11 socket and has no seccomp filter. Mayfly does not restrict VM sockets (AF_VSOCK), which are not part of a network namespace. Whether a browser exploit could use them is unverified.
+- **The tunnel's own traffic is not filtered.** The encrypted WireGuard UDP leaves the namespace through the shared WSL network, as any WSL traffic does. Mayfly doesn't filter it there.
 
 ### Windows: tested and unverified
 

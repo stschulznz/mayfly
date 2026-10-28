@@ -696,7 +696,7 @@ Make a copy of your profile with a wrong port in the `Endpoint` line, and launch
 
 ## Windows and WSL2
 
-This section covers `mayfly.ps1`, the Windows 11 variant. Read the [README section](README.md#windows) first: it states the design and what the variant does not give you. Everything here was tried on one machine only; the README lists what is unverified.
+This section covers `mayfly.ps1`, the Windows 11 variant. Read the [README section](README.md#windows) first: it states the design and the limits of the variant. Everything here was tried on one machine only; the README lists what is unverified.
 
 ### 1. Prepare Windows
 
